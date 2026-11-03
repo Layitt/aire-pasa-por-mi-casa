@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aire CDMX 2004 - Sonificación</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0d1117; color: #e0e0e0; overflow: hidden; }
+        #map { width: 100vw; height: 100vh; background: #0d1117; }
+        /* Dark & Light theme + Relief filters on tiles */
+        .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(0.8) contrast(1.1); transition: filter 0.3s ease; }
+        body.relief-mode:not(.light-mode) .leaflet-tile-pane { filter: grayscale(100%) sepia(25%) hue-rotate(175deg) brightness(0.42) contrast(1.65); }
+        body.light-mode:not(.relief-mode) .leaflet-tile-pane { filter: none; }
+        body.light-mode.relief-mode .leaflet-tile-pane { filter: contrast(1.18) brightness(0.97); }
+        .leaflet-container { background: #0d1117; transition: background 0.3s ease; }
+        .leaflet-control-zoom a { background: rgba(13,17,23,0.9) !important; color: #64c8ff !important; border-color: rgba(100,200,255,0.2) !important; }
+        .leaflet-control-attribution { background: rgba(13,17,23,0.8) !important; color: #555 !important; font-size: 10px !important; }
+        .leaflet-control-attribution a { color: #888 !important; }
+        .control-panel { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(13,17,23,0.95); padding: 20px; border-top: 1px solid rgba(100,200,255,0.15); z-index: 1000; transition: background 0.3s, border-color 0.3s; }
+        .time-display { text-align: center; margin-bottom: 15px; }
+        .time-display .date { font-size: 18px; color: #64c8ff; font-weight: bold; }
+        .time-display .hour { font-size: 24px; color: #fff; margin: 5px 0; }
+        .slider-row { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
+        .slider-row input[type="range"] { flex: 1; height: 6px; -webkit-appearance: none; background: linear-gradient(to right, #1a3a4a, #64c8ff); border-radius: 3px; outline: none; cursor: pointer; }
+        .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: #64c8ff; border-radius: 50%; cursor: grab; box-shadow: 0 0 10px rgba(100,200,255,0.5); }
+        .slider-lbl { font-size: 11px; color: rgba(100,200,255,0.5); min-width: 40px; }
+        .ctrl-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .pb { display: flex; gap: 8px; flex-wrap: wrap; }
+        button { background: rgba(100,200,255,0.08); border: 1px solid rgba(100,200,255,0.25); color: #64c8ff; padding: 7px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.15s; }
+        button:hover { background: rgba(100,200,255,0.15); }
+        button.on { background: rgba(100,200,255,0.25); box-shadow: 0 0 8px rgba(100,200,255,0.2); }
+        .pol-sel { display: flex; gap: 6px; flex-wrap: wrap; }
+        .pol-sel button { padding: 5px 10px; font-size: 11px; }
+        .pol-sel button.on { background: var(--pc); color: #fff; border-color: var(--pc); }
+        .osc-s { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+        .osc-dot { width: 7px; height: 7px; border-radius: 50%; background: #f44; }
+        .osc-dot.ok { background: #4f4; box-shadow: 0 0 6px #4f4; }
+        .info-panel { position: fixed; top: 15px; left: 15px; background: rgba(13,17,23,0.92); padding: 14px; border-radius: 8px; border: 1px solid rgba(100,200,255,0.15); font-size: 12px; z-index: 1000; transition: background 0.3s, border-color 0.3s; }
+        .info-panel h2 { color: #64c8ff; font-size: 15px; margin-bottom: 8px; }
+        .info-panel p { color: rgba(100,200,255,0.5); margin-top: 6px; }
+        .legend { display: flex; gap: 12px; margin-top: 8px; }
+        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+        .station-popup { font-family: 'SF Mono', monospace; }
+        .station-popup h3 { color: #64c8ff; margin-bottom: 6px; font-size: 13px; }
+        .station-popup .v { font-size: 11px; padding: 1px 0; }
+        .station-popup .v.hi { color: #ff6b6b; }
+        .station-popup .v.md { color: #ffd93d; }
+        .station-popup .v.lo { color: #6bcb77; }
+        .leaflet-div-icon.station-icon, .leaflet-div-icon.city-label-icon { background: transparent; border: none; }
+        .station-light { position: absolute; top: 0; left: 0; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none; mix-blend-mode: screen; filter: blur(2px); transition: width 0.35s ease-out, height 0.35s ease-out, opacity 0.35s ease-out; }
+        body.light-mode .station-light { mix-blend-mode: normal; filter: blur(2.5px); }
+        .station-core { position: absolute; top: 0; left: 0; width: 14px; height: 14px; transform: translate(-50%, -50%); border-radius: 50%; cursor: pointer; transition: transform 0.2s ease, opacity 0.35s ease; }
+        .station-core:hover { transform: translate(-50%, -50%) scale(1.4); }
+        .city-lbl { position: absolute; top: 0; left: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font-family: 'SF Mono', 'Fira Code', sans-serif; color: rgba(215,235,255,0.85); text-shadow: 0 0 4px rgba(0,0,0,0.95), 0 1px 3px #000; transition: color 0.3s, text-shadow 0.3s; }
+        .city-lbl.major { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.92); }
+        .city-lbl.sub { font-size: 10px; font-weight: 500; letter-spacing: 0.6px; opacity: 0.82; }
+        body.light-mode .city-lbl { color: rgba(15,23,42,0.85); text-shadow: 0 0 4px rgba(255,255,255,0.98), 0 0 2px #fff; }
+        body.light-mode .city-lbl.major { color: #0f172a; }
+        /* Light theme UI overrides */
+        body.light-mode, body.light-mode #map, body.light-mode .leaflet-container { background: #e2e8f0; color: #1e293b; }
+        body.light-mode .control-panel, body.light-mode .info-panel { background: rgba(255,255,255,0.93); border-color: rgba(15,23,42,0.12); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        body.light-mode .info-panel h2, body.light-mode .time-display .date, body.light-mode .station-popup h3 { color: #0284c7; }
+        body.light-mode .info-panel p, body.light-mode .slider-lbl { color: #64748b; }
+        body.light-mode .time-display .hour { color: #0f172a; }
+        body.light-mode .slider-row input[type="range"] { background: linear-gradient(to right, #cbd5e1, #0284c7); }
+        body.light-mode .slider-row input[type="range"]::-webkit-slider-thumb { background: #0284c7; box-shadow: 0 0 8px rgba(2,132,199,0.4); }
+        body.light-mode button { background: rgba(2,132,199,0.08); border-color: rgba(2,132,199,0.28); color: #0284c7; }
+        body.light-mode button:hover { background: rgba(2,132,199,0.16); }
+        body.light-mode button.on { background: #0284c7; color: #fff; border-color: #0284c7; box-shadow: 0 2px 8px rgba(2,132,199,0.25); }
+        body.light-mode .pol-sel button.on { background: var(--pc); color: #fff; border-color: var(--pc); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        body.light-mode .leaflet-control-zoom a { background: rgba(255,255,255,0.93) !important; color: #0284c7 !important; border-color: rgba(15,23,42,0.15) !important; }
+        body.light-mode .leaflet-control-attribution { background: rgba(255,255,255,0.85) !important; color: #64748b !important; }
+        body.light-mode .leaflet-control-attribution a { color: #334155 !important; }
+        #ld { position: fixed; inset: 0; background: #0d1117; display: flex; align-items: center; justify-content: center; z-index: 9999; color: #64c8ff; font-family: monospace; transition: opacity 0.4s; }
+        #ld.off { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ld"><div style="text-align:center"><div style="font-size:26px;margin-bottom:16px">AIRE CDMX</div><div id="lm">Cargando...</div></div></div>
+    <div id="map"></div>
+    <div class="info-panel">
+        <h2>AIRE CDMX 2004</h2>
+        <p>Sonificación de calidad del aire</p>
+        <p>RAMA - Red Automática de Monitoreo Atmosférico</p>
+        <div class="legend">
+            <span><i style="background:#6bcb77"></i>Bajo</span>
+            <span><i style="background:#ffd93d"></i>Medio</span>
+            <span><i style="background:#ff6b6b"></i>Alto</span>
+        </div>
+    </div>
+    <div class="control-panel">
+        <div class="time-display">
+            <div class="date" id="dD">2004-01-01</div>
+            <div class="hour" id="dH">00:00</div>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">Ene</span>
+            <input type="range" id="sD" min="0" max="365" value="0">
+            <span class="slider-lbl">Dic</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">00h</span>
+            <input type="range" id="sH" min="0" max="23" value="0">
+            <span class="slider-lbl">23h</span>
+        </div>
+        <div class="ctrl-row">
+            <div class="pb">
+                <button id="playBtn" onclick="togglePlay()">▶ Play</button>
+                <button onclick="spd(1)" id="s1">1x</button>
+                <button onclick="spd(2)" id="s2">2x</button>
+                <button onclick="spd(4)" id="s4">4x</button>
+                <button id="relBtn" onclick="toggleRelief()">⛰ Relieve</button>
+                <button id="thmBtn" onclick="toggleTheme()">☀ Claro</button>
+            </div>
+            <div class="pol-sel" id="pSel"></div>
+            <div class="osc-s"><div class="osc-dot" id="oD"></div><span id="oT">OSC: off</span></div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    (function(){
+        var C={url:'../data/air_quality_2004.json',center:[19.40,-99.15],zoom:12,interval:500};
+        var PC={CO:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,2,5]},NO:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,20,50]},NO2:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,30,60]},NOX:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,40,80]},O3:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,40,80]},PM10:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,50,100]},PM25:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,25,50]},SO2:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,10,20]}};
+        var CITIES=[
+            {name:'Ciudad de México',lat:19.4326,lon:-99.1332,t:'major'},
+            {name:'Ecatepec',lat:19.6019,lon:-99.0506,t:'major'},
+            {name:'Nezahualcóyotl',lat:19.4006,lon:-99.0148,t:'major'},
+            {name:'Naucalpan',lat:19.4785,lon:-99.2396,t:'major'},
+            {name:'Tlalnepantla',lat:19.5400,lon:-99.1950,t:'major'},
+            {name:'Texcoco',lat:19.5119,lon:-98.8829,t:'major'},
+            {name:'Chalco',lat:19.2647,lon:-98.8978,t:'major'},
+            {name:'Cuautitlán Izcalli',lat:19.6469,lon:-99.2165,t:'major'},
+            {name:'Chimalhuacán',lat:19.4208,lon:-98.9547,t:'major'},
+            {name:'Iztapalapa',lat:19.3553,lon:-99.0622,t:'sub'},
+            {name:'Gustavo A. Madero',lat:19.4873,lon:-99.1136,t:'sub'},
+            {name:'Coyoacán',lat:19.3467,lon:-99.1617,t:'sub'},
+            {name:'Tlalpan',lat:19.2882,lon:-99.1672,t:'sub'},
+            {name:'Xochimilco',lat:19.2572,lon:-99.1030,t:'sub'},
+            {name:'Azcapotzalco',lat:19.4869,lon:-99.1859,t:'sub'},
+            {name:'Miguel Hidalgo',lat:19.4319,lon:-99.1956,t:'sub'},
+            {name:'Álvaro Obregón',lat:19.3587,lon:-99.2250,t:'sub'},
+            {name:'Cuajimalpa',lat:19.3558,lon:-99.2994,t:'sub'},
+            {name:'Tláhuac',lat:19.2869,lon:-99.0031,t:'sub'},
+            {name:'Milpa Alta',lat:19.1922,lon:-99.0231,t:'sub'},
+            {name:'Atizapán',lat:19.5562,lon:-99.2675,t:'sub'},
+            {name:'Coacalco',lat:19.6317,lon:-99.1008,t:'sub'},
+            {name:'Tultitlán',lat:19.6458,lon:-99.1694,t:'sub'},
+            {name:'Huixquilucan',lat:19.3969,lon:-99.3150,t:'sub'},
+            {name:'Ixtapaluca',lat:19.3186,lon:-98.8822,t:'sub'}
+        ];
+        var map,streetLayer,reliefLayer,cityLabelsLayer,reliefOn=false,lightOn=false,data,st={},mk={},di=0,hr=0,play=false,iv=null,sp=1,pol='CO',dates=[],osc=null,oscOn=false;
+
+        function lm(t){var e=document.getElementById('lm');if(e)e.textContent=t;}
+        function hide(){var e=document.getElementById('ld');if(e){e.classList.add('off');setTimeout(function(){e.remove()},500);}}
+
+        window.addEventListener('DOMContentLoaded',function(){
+            lm('Iniciando mapa...');
+            map=L.map('map',{center:C.center,zoom:C.zoom,zoomControl:true});
+            streetLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+                attribution:'© OpenStreetMap contributors',maxZoom:19
+            }).addTo(map);
+            reliefLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',{
+                attribution:'Tiles © Esri — Source: Esri Shaded Relief',maxNativeZoom:13,maxZoom:19
+            });
+            cityLabelsLayer=L.layerGroup(CITIES.map(function(c){
+                return L.marker([c.lat,c.lon],{
+                    interactive:false,
+                    icon:L.divIcon({
+                        className:'city-label-icon',
+                        iconSize:[0,0],
+                        iconAnchor:[0,0],
+                        html:'<div class="city-lbl '+c.t+'">'+c.name+'</div>'
+                    })
+                });
+            }));
+            lm('Cargando datos...');
+            fetch(C.url).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+                data=d;st=d.stations;dates=Object.keys(d.data).sort();
+                for(var code in st){var s=st[code];
+                    var icon=L.divIcon({
+                        className:'station-icon',
+                        iconSize:[0,0],
+                        iconAnchor:[0,0],
+                        popupAnchor:[0,-8],
+                        html:'<div class="station-light" id="l_'+code+'"></div><div class="station-core" id="c_'+code+'"></div>'
+                    });
+                    var m=L.marker([s.lat,s.lon],{icon:icon}).addTo(map);
+                    m.code=code;m.bindPopup('<div class="station-popup"><h3>'+s.name+' ('+code+')</h3><div id="p_'+code+'">...</div></div>');
+                    m.on('popupopen',upd);
+                    mk[code]=m;
+                }
+                var b=L.latLngBounds(dates.map(function(){return Object.values(st).map(function(s){return[s.lat,s.lon]})[0]}));
+                var all=Object.values(st).map(function(s){return[s.lat,s.lon]});
+                map.fitBounds(L.latLngBounds(all).pad(0.1));
+                setupCtrl();setupOSC();upd();hide();
+            }).catch(function(e){
+                console.error(e);lm('Error: '+e.message);setTimeout(hide,6000);
+            });
+        });
+
+        function setupCtrl(){
+            var sd=document.getElementById('sD'),sh=document.getElementById('sH');
+            sd.max=dates.length-1;
+            sd.oninput=function(){di=+this.value;upd();sOSC()};
+            sh.oninput=function(){hr=+this.value;upd();sOSC()};
+            var sel=document.getElementById('pSel');
+            Object.keys(PC).forEach(function(c){
+                var b=document.createElement('button');b.textContent=c;b.style.setProperty('--pc',PC[c].lo);
+                if(c===pol)b.className='on';
+                b.onclick=function(){pol=c;sel.querySelectorAll('button').forEach(function(x){x.className=x.textContent===c?'on':''});upd();sOSC()};
+                sel.appendChild(b);
+            });
+        }
+
+        function hexToRgb(hex){
+            var n=parseInt(hex.slice(1),16);
+            return ((n>>16)&255)+','+((n>>8)&255)+','+(n&255);
+        }
+
+        function upd(){
+            if(!data||!dates.length)return;
+            var dk=dates[di],dd=data.data[dk];
+            document.getElementById('dD').textContent=dk;
+            document.getElementById('dH').textContent=String(hr).padStart(2,'0')+':00';
+            if(!dd)return;var pd=dd[pol],c=PC[pol];
+            for(var code in mk){
+                var v=pd&&pd[code]?pd[code][hr]:null;
+                var lEl=document.getElementById('l_'+code),cEl=document.getElementById('c_'+code);
+                if(!lEl||!cEl)continue;
+                if(v!=null){
+                    var col=v<c.r[1]?c.lo:v<c.r[2]?c.md:c.hi;
+                    var rgb=hexToRgb(col);
+                    var norm=Math.min(v/(c.r[2]*1.3),1.6);
+                    var sz=Math.round(52+norm*85);
+                    lEl.style.width=sz+'px';
+                    lEl.style.height=sz+'px';
+                    lEl.style.opacity=Math.min((lightOn?0.72:0.55)+norm*0.35,1);
+                    if(lightOn){
+                        lEl.style.background='radial-gradient(circle, rgba('+rgb+',0.95) 0%, rgba('+rgb+',0.78) 12%, rgba('+rgb+',0.42) 30%, rgba('+rgb+',0.15) 55%, rgba('+rgb+',0) 100%)';
+                        cEl.style.background='radial-gradient(circle, #fff 0%, '+col+' 55%, rgba('+rgb+',0) 100%)';
+                    }else{
+                        lEl.style.background='radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba('+rgb+',0.85) 8%, rgba('+rgb+',0.45) 24%, rgba('+rgb+',0.16) 48%, rgba('+rgb+',0.04) 72%, rgba('+rgb+',0) 100%)';
+                        cEl.style.background='radial-gradient(circle, #fff 0%, '+col+' 45%, rgba('+rgb+',0) 100%)';
+                    }
+                    cEl.style.opacity='1';
+                }else{
+                    lEl.style.width='20px';
+                    lEl.style.height='20px';
+                    lEl.style.opacity='0.2';
+                    lEl.style.background='radial-gradient(circle, rgba(140,160,180,0.5) 0%, rgba(140,160,180,0) 100%)';
+                    cEl.style.background='radial-gradient(circle, rgba(140,160,180,0.6) 0%, rgba(140,160,180,0) 70%)';
+                    cEl.style.opacity='0.4';
+                }
+            }
+            for(var code in st){var el=document.getElementById('p_'+code);if(!el)continue;var h='';
+                for(var p in data.pollutant_info){var info=data.pollutant_info[p];var v=dd[p]&&dd[p][code]?dd[p][code][hr]:null;
+                    var d=v!=null?v.toFixed(1)+' '+info.unit:'Sin datos';var cl='';
+                    if(v!=null){var cc=PC[p];cl=v>=cc.r[2]?'hi':v>=cc.r[1]?'md':'lo';}
+                    h+='<div class="v '+cl+'">'+info.name+': '+d+'</div>';
+                }el.innerHTML=h;
+            }
+        }
+
+        function togglePlay(){
+            play=!play;var b=document.getElementById('playBtn');
+            if(play){b.textContent='⏸ Pause';b.className='on';
+                iv=setInterval(function(){hr++;if(hr>23){hr=0;di=(di+1)%dates.length;document.getElementById('sD').value=di;}
+                    document.getElementById('sH').value=hr;upd();sOSC();},C.interval/sp);
+            }else{b.textContent='▶ Play';b.className='';clearInterval(iv);iv=null;}
+        }
+        window.togglePlay=togglePlay;
+        window.spd=function(s){sp=s;['s1','s2','s4'].forEach(function(id,i){document.getElementById(id).className=(i+1===s)?'on':''});if(play){clearInterval(iv);togglePlay();togglePlay();}};
+        window.toggleRelief=function(){
+            reliefOn=!reliefOn;
+            var b=document.getElementById('relBtn');
+            if(reliefOn){
+                if(map.hasLayer(streetLayer))map.removeLayer(streetLayer);
+                reliefLayer.addTo(map);
+                cityLabelsLayer.addTo(map);
+                document.body.classList.add('relief-mode');
+                b.className='on';
+            }else{
+                if(map.hasLayer(reliefLayer))map.removeLayer(reliefLayer);
+                if(map.hasLayer(cityLabelsLayer))map.removeLayer(cityLabelsLayer);
+                streetLayer.addTo(map);
+                document.body.classList.remove('relief-mode');
+                b.className='';
+            }
+        };
+        window.toggleTheme=function(){
+            lightOn=!lightOn;
+            var b=document.getElementById('thmBtn');
+            if(lightOn){
+                document.body.classList.add('light-mode');
+                b.textContent='🌙 Oscuro';
+                b.className='on';
+            }else{
+                document.body.classList.remove('light-mode');
+                b.textContent='☀ Claro';
+                b.className='';
+            }
+            upd();
+        };
+
+        function setupOSC(){
+            try{osc=new WebSocket('ws://localhost:8080');
+                osc.onopen=function(){oscOn=true;document.getElementById('oD').className='osc-dot ok';document.getElementById('oT').textContent='OSC: on';};
+                osc.onclose=function(){oscOn=false;document.getElementById('oD').className='osc-dot';document.getElementById('oT').textContent='OSC: off';};
+                osc.onerror=function(){oscOn=false;};
+            }catch(e){}
+        }
+        function sOSC(){
+            if(!oscOn||!data||!dates.length)return;var dk=dates[di],dd=data.data[dk];if(!dd)return;
+            var m={address:'/aire',args:[{type:'s',value:dk},{type:'i',value:hr},{type:'s',value:pol}]};
+            Object.keys(st).forEach(function(c){m.args.push({type:'f',value:dd[pol]&&dd[pol][c]?dd[pol][c][hr]??0:0})});
+            try{osc.send(JSON.stringify(m))}catch(e){}
+        }
+    })();
+    </script>
+</body>
+</html>

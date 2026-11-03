@@ -1,0 +1,14 @@
+{
+  "name": "aire-cdmx-map",
+  "version": "1.0.0",
+  "description": "Interactive map for Aire CDMX 2004 sonification",
+  "main": "osc_bridge.js",
+  "scripts": {
+    "bridge": "node osc_bridge.js",
+    "serve": "python3 -m http.server 3000"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "osc": "^2.4.0"
+  }
+}
