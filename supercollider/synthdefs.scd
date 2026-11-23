@@ -13,6 +13,8 @@
 SynthDef(\aire_co, {
     |out = 0, freq = 60, amp = 0.5, gate = 1, pan = 0, detune = 0.5|
     var sig, env, sub, filtered;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.1, 1, 0.5), gate, doneAction: 2);
 
@@ -39,6 +41,8 @@ SynthDef(\aire_no, {
     |out = 0, freq = 400, amp = 0.3, gate = 1, pan = 0,
      breathiness = 0.5, resonance = 0.3|
     var sig, env, noise, filtered, modulated;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.2, 1, 0.8), gate, doneAction: 2);
 
@@ -66,6 +70,8 @@ SynthDef(\aire_no2, {
     |out = 0, freq = 800, amp = 0.2, gate = 1, pan = 0,
      metallic = 0.7, scrape = 0.3|
     var sig, env, mod, partials;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.05, 1, 0.3), gate, doneAction: 2);
 
@@ -93,6 +99,8 @@ SynthDef(\aire_nox, {
     |out = 0, freq = 300, amp = 0.25, gate = 1, pan = 0,
      clusters = 0.6, dissonance = 0.3|
     var sig, env, cluster;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.15, 1, 0.6), gate, doneAction: 2);
 
@@ -120,6 +128,8 @@ SynthDef(\aire_o3, {
     |out = 0, freq = 600, amp = 0.2, gate = 1, pan = 0,
      shimmer = 0.8, brightness = 0.5|
     var sig, env, pad, shimmerLFO;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.3, 1, 1.2), gate, doneAction: 2);
 
@@ -150,6 +160,8 @@ SynthDef(\aire_pm25, {
     |out = 0, freq = 1200, amp = 0.15, gate = 1, pan = 0,
      fineness = 0.9, sparkle = 0.4|
     var sig, env, fine, sparkleSig;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.05, 1, 0.2), gate, doneAction: 2);
 
@@ -177,6 +189,8 @@ SynthDef(\aire_so2, {
     |out = 0, freq = 50, amp = 0.35, gate = 1, pan = 0,
      rumble = 0.7, acidity = 0.3|
     var sig, env, drone, rumbleSig;
+    /* .set sobre amp llega como salto; el lag evita el clic sin retrasar el nivel */
+    amp = amp.lag(0.2);
 
     env = EnvGen.kr(Env.asr(0.4, 1, 0.8), gate, doneAction: 2);
 

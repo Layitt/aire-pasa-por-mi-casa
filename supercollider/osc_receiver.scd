@@ -95,6 +95,50 @@ var resetState = {
     "AIRE: estado vaciado; los synths se recrearán al siguiente mensaje".postln;
 };
 
+// Cierra los nodos `aire_*` que quedaron sonando de una ejecución anterior (por
+// ejemplo si sclang murió de golpe sin pasar por stopAll). El árbol se recorre
+// como una lista deslizante: [nodeID, -1, defName] es un synth y
+// [nodeID, numChildren] un grupo, así que basta buscar ese patrón.
+var closeLeftovers = {
+    var reply;
+    reply = OSCFunc({ |msg|
+        var i = 1;
+        reply.free;
+        while { i < msg.size } {
+            var defName = msg[i + 2];
+            if (msg[i + 1] == -1
+                and: { defName.isKindOf(Symbol) or: { defName.isKindOf(String) } }
+                and: { defName.asString.beginsWith("aire_") }) {
+                Server.default.sendMsg(\n_set, msg[i], \gate, 0);
+            };
+            i = i + 1;
+        };
+    }, '/g_queryTree.reply');
+    Server.default.sendMsg(\g_queryTree, 0, 0);
+};
+
+// Si el mapa deja de mandar datos (pausa definitiva, pestaña cerrada, puente
+// caído) los synths se cierran solos en vez de quedarse sonando indefinidamente.
+// El mapa reenvía el estado cada pocos segundos justamente para esto.
+var lastMsgTime = Main.elapsedTime;
+var idleTimeout = 10;
+var watchdog = Routine({
+    loop {
+        1.0.wait;
+        if (activeSynths.notEmpty and: { Main.elapsedTime - lastMsgTime > idleTimeout }) {
+            cleanup.value;
+            "AIRE: % s sin datos del mapa, sintetizadores cerrados".format(idleTimeout).postln;
+        };
+    };
+}).play(AppClock);
+
+// Apaga este receptor; se ejecuta al volver a correr el archivo para cerrar los
+// nodos y el vigilante de la instancia anterior.
+var shutdown = {
+    watchdog.stop;
+    cleanup.value;
+};
+
 // Los SynthDefs son la única dependencia dura de este archivo: sin ellos
 // `Synth(...)` falla y el mapa manda datos pero no suena nada. Pasa cuando se
 // ejecutó sólo este archivo, o cuando synthdefs.scd se ejecutó antes de que el
@@ -111,6 +155,16 @@ if (Server.default.serverRunning) {
     "AIRE: el servidor de audio no está corriendo; arráncalo y vuelve a ejecutar este archivo.".postln;
 };
 
+// Si esta sclang ya tenía un receptor de una corrida anterior, cerrarlo: si no,
+// quedan dos OSCdef sobre /aire y los nodos de los dos.
+if (~aire.notNil and: { ~aire[\shutdown].notNil }) {
+    ~aire[\shutdown].value;
+};
+
+if (Server.default.serverRunning) {
+    closeLeftovers.value;
+};
+
 // Manejador OSC
 OSCdef(\aireReceiver, { |msg|
     var period = msg[1].asString;
@@ -121,6 +175,7 @@ OSCdef(\aireReceiver, { |msg|
     var baseAmp = ampScale[pollutant] ? 0.01;
     var status = List.new;
 
+    lastMsgTime = Main.elapsedTime;
     // El formato es fijo: periodo, contaminante y 4 promedios de zona. Una
     // página vieja manda fecha + hora + 23 estaciones, y sin este aviso el
     // sintoma es sólo "no suena": el contaminante llega como \18.
@@ -199,6 +254,7 @@ currentEnvironment.put(\aire, (
     stopAll: stopAll,
     cleanup: cleanup,
     resetState: resetState,
+    shutdown: shutdown,
     activeSynths: activeSynths
 ));
 )
