@@ -144,31 +144,6 @@ SynthDef(\aire_o3, {
     Out.ar(out, sig);
 }).add;
 
-// ==================== PM10 - Material Particulado 10μm ====================
-// Textura granular polvorienta - representa partículas visibles
-SynthDef(\aire_pm10, {
-    |out = 0, freq = 200, amp = 0.3, gate = 1, pan = 0,
-     grainRate = 10, grainSize = 0.1, dustiness = 0.5|
-    var sig, env, grains;
-
-    env = EnvGen.kr(Env.asr(0.1, 1, 0.5), gate, doneAction: 2);
-
-    // Síntesis granular para efecto de partículas
-    grains = GrainIn.ar(2, gate, grainSize,
-        LFNoise1.ar(grainRate).range(freq * 0.5, freq * 2),
-        LFNoise1.kr(grainRate * 0.1).range(-1, 1)
-    );
-
-    // Agregar partículas de polvo
-    sig = grains + (Dust.ar(grainRate * 2) * SinOsc.ar(freq * 0.5, 0, 0.1));
-
-    sig = sig * env * amp * dustiness;
-    sig = Pan2.ar(sig, pan);
-    sig = LPF.ar(sig, freq * 4);
-
-    Out.ar(out, sig);
-}).add;
-
 // ==================== PM25 - Material Particulado 2.5μm ====================
 // Partículas finas de alta frecuencia - representa micropartículas invisibles
 SynthDef(\aire_pm25, {
@@ -226,5 +201,5 @@ SynthDef(\aire_so2, {
 }).add;
 
 "¡SynthDefs de Aire CDMX cargados!".postln;
-"Contaminantes: CO, NO, NO2, NOX, O3, PM10, PM25, SO2".postln;
+"Contaminantes: CO, NO, NO2, NOX, O3, PM25, SO2".postln;
 )
