@@ -15,7 +15,7 @@ Aire pasa por mi casa/
 │   ├── cat_estacion.csv       # Catálogo oficial de estaciones (SEDEMA)
 │   └── convert_data.py        # Conversor Excel → JSON por año
 ├── map/
-│   ├── index.html             # Mapa interactivo (Leaflet)
+│   ├── index.html             # Mapa interactivo (MapLibre GL, paleta por hora)
 │   ├── osc_bridge.js          # Puente WebSocket → OSC
 │   └── package.json           # Dependencias Node.js
 └── supercollider/
@@ -67,10 +67,11 @@ cd map && npm install && node osc_bridge.js
 Abrir **http://localhost:3000/map/** en el navegador. Sin el puente OSC el mapa
 funciona igual; sólo se queda sin audio.
 
-El indicador de la barra (`OSC: on` / `OSC: sin puente`) habla del **puente**, no
-de SuperCollider: si dice `sin puente` falta la Terminal 2, aunque SuperCollider
-ya esté escuchando en el puerto 57120. Al arrancar el puente el mapa se reconecta
-solo en unos segundos, sin recargar la página.
+El indicador `OSC` de la consola habla del **puente**, no de SuperCollider: si
+sale apagado falta la Terminal 2, aunque SuperCollider ya esté escuchando en el
+puerto 57120. El mapa se reconecta solo en unos segundos (sin recargar) y
+reenvía su estado cada 3 s, que es lo que mantiene vivos los sintetizadores en
+SuperCollider.
 
 ### 3. Iniciar SuperCollider
 
@@ -89,6 +90,14 @@ servidor (Ctrl+B / `Server.default.boot`) y vuelve a ejecutarlo.
 Si reinicias el servidor de audio, ejecuta `~aire.resetState`: el receptor
 guarda sus sintetizadores en memoria y, tras un reinicio, esos nodos ya no
 existen (los mensajes sólo actualizarían fantasmas y no sonaría nada).
+
+El receptor además:
+
+- barre al arrancar los nodos `aire_*` que dejó sonando una corrida anterior,
+- cierra los suyos si el mapa deja de enviar datos (pestaña cerrada, puente
+  caído) durante 10 s, en vez de dejarlos sonando para siempre,
+- y al volver a ejecutarlo apaga al receptor anterior, para no quedar con dos
+  `OSCdef` sobre `/aire`.
 
 ### 4. Conectar
 
@@ -119,21 +128,21 @@ ejecutado o su sclang escucha en otro puerto.
 
 | Control | Función |
 |---------|---------|
-| Selector de periodo | Serie completa o un año; **por día**, **por semana** o **por año** |
-| Slider inferior | Navegar por el periodo elegido |
 | Botón Reproducir | Avance automático, un periodo por tick |
-| Botones 1x/2x/4x | Velocidad de reproducción |
+| Botones 1×/2×/4× | Velocidad de reproducción |
+| Botones Día/Semana/Año | Granularidad de la línea de tiempo |
+| Slider de periodo | Recorre la serie completa (7,671 días, 1,097 semanas o 21 años) |
+| Slider de hora | Tiñe el mapa (amanecer, día, atardecer, noche); no cambia los datos |
 | Botones CO/NO/etc | Seleccionar contaminante activo |
 
 El mapa no recorre las horas: cada estación tiene un **promedio diario** y la
 línea de tiempo agrupa esos días según el paso elegido:
 
-| Vista | Periodos | Ejemplo |
-|-------|----------|---------|
-| Serie completa · por día | 7,671 | `2004-01-01` |
-| Serie completa · por semana | 1,097 | `2004-S30` |
-| Serie completa · por año | 21 | `2004` |
-| Un año · por día | 365-366 | `2011-06-15` |
+| Paso | Periodos | Ejemplo |
+|------|----------|---------|
+| Día | 7,671 | `2004-01-01` |
+| Semana | 1,097 | `2004-S30` |
+| Año | 21 | `2004` |
 
 Una semana es de lunes a domingo, así que cruza los fines de año sin problema.
 El valor de cada periodo es la media de los promedios diarios disponibles.

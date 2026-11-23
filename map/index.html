@@ -3,512 +3,906 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aire CDMX 2004-2024 - Sonificación</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <title>Aire CDMX 2004 · Sonificación</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <link rel="icon" href="data:," />
     <style>
+        :root {
+            --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+            --bg: #0d1013;
+            --ink: #e9e7e2;
+            --ink-2: #a5a29b;
+            --ink-3: #6e6b65;
+            --hair: rgba(255, 255, 255, 0.09);
+            --surface: rgba(18, 20, 23, 0.82);
+            --solid: #15181b;
+            --chip: rgba(255, 255, 255, 0.06);
+            --accent: #c4a061;
+            --ok: #7ba37f;
+            --dot-ring: rgba(255, 255, 255, 0.6);
+            --ctrl-filter: invert(1);
+            --lo: #6f9a7a;
+            --md: #c49a3a;
+            --hi: #b45f48;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0d1117; color: #e0e0e0; overflow: hidden; }
-        #map { width: 100vw; height: 100vh; background: #0d1117; }
-        /* Dark & Light theme + Relief filters on tiles */
-        .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(0.8) contrast(1.1); transition: filter 0.3s ease; }
-        body.relief-mode:not(.light-mode) .leaflet-tile-pane { filter: grayscale(100%) sepia(25%) hue-rotate(175deg) brightness(0.42) contrast(1.65); }
-        body.light-mode:not(.relief-mode) .leaflet-tile-pane { filter: none; }
-        body.light-mode.relief-mode .leaflet-tile-pane { filter: contrast(1.18) brightness(0.97); }
-        .leaflet-container { background: #0d1117; transition: background 0.3s ease; }
-        .leaflet-control-zoom a { background: rgba(13,17,23,0.9) !important; color: #64c8ff !important; border-color: rgba(100,200,255,0.2) !important; }
-        .leaflet-control-attribution { background: rgba(13,17,23,0.8) !important; color: #555 !important; font-size: 10px !important; }
-        .leaflet-control-attribution a { color: #888 !important; }
-        .control-panel { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(13,17,23,0.95); padding: 20px; border-top: 1px solid rgba(100,200,255,0.15); z-index: 1000; transition: background 0.3s, border-color 0.3s; }
-        .time-display { text-align: center; margin-bottom: 15px; }
-        .time-display .date { font-size: 18px; color: #64c8ff; font-weight: bold; }
-        .time-display .hour { font-size: 24px; color: #fff; margin: 5px 0; }
-        .time-display .sub { font-size: 12px; color: rgba(100,200,255,0.55); margin-top: 2px; }
-        body.light-mode .time-display .sub { color: #64748b; }
-        .slider-row { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
-        .slider-row input[type="range"] { flex: 1; height: 6px; -webkit-appearance: none; background: linear-gradient(to right, #1a3a4a, #64c8ff); border-radius: 3px; outline: none; cursor: pointer; }
-        .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: #64c8ff; border-radius: 50%; cursor: grab; box-shadow: 0 0 10px rgba(100,200,255,0.5); }
-        .slider-lbl { font-size: 11px; color: rgba(100,200,255,0.5); min-width: 40px; }
-        .ctrl-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; }
-        .pb { display: flex; gap: 8px; flex-wrap: wrap; }
-        button { background: rgba(100,200,255,0.08); border: 1px solid rgba(100,200,255,0.25); color: #64c8ff; padding: 7px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.15s; }
-        button:hover { background: rgba(100,200,255,0.15); }
-        button.on { background: rgba(100,200,255,0.25); box-shadow: 0 0 8px rgba(100,200,255,0.2); }
-        .pol-sel { display: flex; gap: 6px; flex-wrap: wrap; }
-        .pol-sel button { padding: 5px 10px; font-size: 11px; }
-        .pol-sel button.on { background: var(--pc); color: #fff; border-color: var(--pc); }
-        .yr-sel select { background: rgba(100,200,255,0.08); border: 1px solid rgba(100,200,255,0.25); color: #64c8ff; padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; cursor: pointer; }
-        body.light-mode .yr-sel select { background: rgba(2,132,199,0.08); border-color: rgba(2,132,199,0.28); color: #0284c7; }
-        .osc-s { display: flex; align-items: center; gap: 6px; font-size: 11px; }
-        .osc-dot { width: 7px; height: 7px; border-radius: 50%; background: #f44; }
-        .osc-dot.ok { background: #4f4; box-shadow: 0 0 6px #4f4; }
-        .info-panel { position: fixed; top: 15px; left: 15px; background: rgba(13,17,23,0.92); padding: 14px; border-radius: 8px; border: 1px solid rgba(100,200,255,0.15); font-size: 12px; z-index: 1000; transition: background 0.3s, border-color 0.3s; }
-        .info-panel h2 { color: #64c8ff; font-size: 15px; margin-bottom: 8px; }
-        .info-panel p { color: rgba(100,200,255,0.5); margin-top: 6px; }
-        .legend { display: flex; gap: 12px; margin-top: 8px; }
-        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
-        .station-popup { font-family: 'SF Mono', monospace; }
-        .station-popup h3 { color: #64c8ff; margin-bottom: 6px; font-size: 13px; }
-        .station-popup .v { font-size: 11px; padding: 1px 0; }
-        .station-popup .v.hi { color: #ff6b6b; }
-        .station-popup .v.md { color: #ffd93d; }
-        .station-popup .v.lo { color: #6bcb77; }
-        .leaflet-div-icon.station-icon, .leaflet-div-icon.city-label-icon { background: transparent; border: none; }
-        .station-light { position: absolute; top: 0; left: 0; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none; mix-blend-mode: screen; filter: blur(2px); transition: width 0.35s ease-out, height 0.35s ease-out, opacity 0.35s ease-out; }
-        body.light-mode .station-light { mix-blend-mode: normal; filter: blur(2.5px); }
-        .station-core { position: absolute; top: 0; left: 0; width: 14px; height: 14px; transform: translate(-50%, -50%); border-radius: 50%; cursor: pointer; transition: transform 0.2s ease, opacity 0.35s ease; }
-        .station-core:hover { transform: translate(-50%, -50%) scale(1.4); }
-        .city-lbl { position: absolute; top: 0; left: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font-family: 'SF Mono', 'Fira Code', sans-serif; color: rgba(215,235,255,0.85); text-shadow: 0 0 4px rgba(0,0,0,0.95), 0 1px 3px #000; transition: color 0.3s, text-shadow 0.3s; }
-        .city-lbl.major { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.92); }
-        .city-lbl.sub { font-size: 10px; font-weight: 500; letter-spacing: 0.6px; opacity: 0.82; }
-        body.light-mode .city-lbl { color: rgba(15,23,42,0.85); text-shadow: 0 0 4px rgba(255,255,255,0.98), 0 0 2px #fff; }
-        body.light-mode .city-lbl.major { color: #0f172a; }
-        /* Light theme UI overrides */
-        body.light-mode, body.light-mode #map, body.light-mode .leaflet-container { background: #e2e8f0; color: #1e293b; }
-        body.light-mode .control-panel, body.light-mode .info-panel { background: rgba(255,255,255,0.93); border-color: rgba(15,23,42,0.12); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        body.light-mode .info-panel h2, body.light-mode .time-display .date, body.light-mode .station-popup h3 { color: #0284c7; }
-        body.light-mode .info-panel p, body.light-mode .slider-lbl { color: #64748b; }
-        body.light-mode .time-display .hour { color: #0f172a; }
-        body.light-mode .slider-row input[type="range"] { background: linear-gradient(to right, #cbd5e1, #0284c7); }
-        body.light-mode .slider-row input[type="range"]::-webkit-slider-thumb { background: #0284c7; box-shadow: 0 0 8px rgba(2,132,199,0.4); }
-        body.light-mode button { background: rgba(2,132,199,0.08); border-color: rgba(2,132,199,0.28); color: #0284c7; }
-        body.light-mode button:hover { background: rgba(2,132,199,0.16); }
-        body.light-mode button.on { background: #0284c7; color: #fff; border-color: #0284c7; box-shadow: 0 2px 8px rgba(2,132,199,0.25); }
-        body.light-mode .pol-sel button.on { background: var(--pc); color: #fff; border-color: var(--pc); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-        body.light-mode .leaflet-control-zoom a { background: rgba(255,255,255,0.93) !important; color: #0284c7 !important; border-color: rgba(15,23,42,0.15) !important; }
-        body.light-mode .leaflet-control-attribution { background: rgba(255,255,255,0.85) !important; color: #64748b !important; }
-        body.light-mode .leaflet-control-attribution a { color: #334155 !important; }
-        #ld { position: fixed; inset: 0; background: #0d1117; display: flex; align-items: center; justify-content: center; z-index: 9999; color: #64c8ff; font-family: monospace; transition: opacity 0.4s; }
+        html, body { height: 100%; }
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--ink);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            transition: background 0.6s ease, color 0.6s ease;
+        }
+        #map { position: fixed; inset: 0; background: var(--bg); }
+        .maplibregl-map { font-family: var(--sans); }
+        .maplibregl-canvas { outline: none; }
+
+        /* ── Identidad ───────────────────────────────────────────── */
+        .brand {
+            position: fixed; top: 20px; left: 20px; z-index: 900;
+            padding: 14px 16px 13px; border-radius: 12px; pointer-events: none;
+            background: var(--surface); border: 1px solid var(--hair);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 24px 48px -28px rgba(0, 0, 0, 0.6);
+            transition: background 0.6s, border-color 0.6s, box-shadow 0.6s;
+        }
+        .brand h1 { font-family: var(--serif); font-size: 16px; font-weight: 500; letter-spacing: 0.005em; line-height: 1.1; }
+        .brand p { margin-top: 3px; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); transition: color 0.6s; }
+        .scale { display: flex; gap: 12px; margin-top: 11px; font-size: 9.5px; letter-spacing: 0.05em; color: var(--ink-2); transition: color 0.6s; }
+        .scale span { display: inline-flex; align-items: center; gap: 5px; }
+        .scale i { width: 5px; height: 5px; border-radius: 50%; }
+        .scale i.lo { background: var(--lo); }
+        .scale i.md { background: var(--md); }
+        .scale i.hi { background: var(--hi); }
+
+        /* ── Consola de reproducción ─────────────────────────────── */
+        .console {
+            position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 1000;
+            width: min(620px, calc(100vw - 40px));
+            display: flex; flex-direction: column; gap: 10px;
+            padding: 13px 15px 11px; border-radius: 14px;
+            background: var(--surface); border: 1px solid var(--hair);
+            backdrop-filter: blur(18px) saturate(130%); -webkit-backdrop-filter: blur(18px) saturate(130%);
+            box-shadow: 0 30px 60px -24px rgba(0, 0, 0, 0.65);
+            transition: background 0.6s, border-color 0.6s, box-shadow 0.6s;
+        }
+        .head { display: flex; align-items: center; gap: 11px; }
+        .play {
+            flex: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+            display: grid; place-items: center; color: var(--ink);
+            background: transparent; border: 1px solid var(--hair);
+            transition: background 0.15s, border-color 0.15s, color 0.6s;
+        }
+        .play:hover { background: var(--chip); border-color: var(--ink-3); }
+        .play.on { background: var(--chip); border-color: var(--ink-3); }
+        .play svg { width: 12px; height: 12px; }
+        .play .i-pause { display: none; }
+        .play.on .i-pause { display: block; }
+        .play.on .i-play { display: none; }
+
+        .clock { display: flex; align-items: baseline; gap: 7px; flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+        .clock .sep { color: var(--ink-3); font-size: 13px; }
+        .clock #dD { font-size: 13px; letter-spacing: 0.01em; white-space: nowrap; }
+        .clock #dH { font-size: 13px; color: var(--ink-2); transition: color 0.6s; }
+
+        .speeds { display: flex; gap: 2px; flex: none; }
+        .speeds button {
+            font: inherit; font-size: 11px; letter-spacing: 0.03em; padding: 5px 7px;
+            border: 0; border-radius: 7px; cursor: pointer;
+            background: transparent; color: var(--ink-3);
+            transition: color 0.15s, background 0.15s;
+        }
+        .speeds button:hover { color: var(--ink-2); }
+        .speeds button.on { color: var(--ink); background: var(--chip); }
+
+        .osc {
+            flex: none; display: flex; align-items: center; gap: 7px;
+            padding-left: 11px; border-left: 1px solid var(--hair);
+            font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3);
+            transition: color 0.6s, border-color 0.6s;
+        }
+        .osc i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); transition: background 0.3s, box-shadow 0.3s; }
+        .osc i.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(111, 154, 122, 0.18); }
+
+        .sliders { display: flex; gap: 18px; padding: 0 2px; }
+        .slider { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
+        .slider:first-child { flex: 1.8; }
+        .slider .lbl { flex: none; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); transition: color 0.6s; }
+
+        input[type="range"] {
+            flex: 1; min-width: 0; height: 16px; cursor: pointer;
+            background: transparent; -webkit-appearance: none; appearance: none; outline: none;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 2px; border-radius: 2px;
+            background: linear-gradient(to right, var(--accent) 0, var(--accent) var(--p, 0%), var(--hair) var(--p, 0%), var(--hair) 100%);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px;
+            border-radius: 50%; background: var(--accent); border: none;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+        input[type="range"]::-moz-range-track { height: 2px; border-radius: 2px; background: var(--hair); }
+        input[type="range"]::-moz-range-progress { height: 2px; border-radius: 2px; background: var(--accent); }
+        input[type="range"]::-moz-range-thumb {
+            width: 10px; height: 10px; border: none; border-radius: 50%;
+            background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+        input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(196, 160, 97, 0.28); }
+        input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(196, 160, 97, 0.28); }
+
+        .pollutants { display: flex; justify-content: space-between; gap: 2px; padding-top: 9px; border-top: 1px solid var(--hair); transition: border-color 0.6s; }
+        .pollutants button {
+            flex: 0 0 auto; font: inherit; font-size: 10px; letter-spacing: 0.07em; padding: 5px 10px;
+            border: 0; border-radius: 7px; cursor: pointer;
+            background: transparent; color: var(--ink-2);
+            transition: color 0.15s, background 0.15s;
+        }
+        .pollutants button:hover { color: var(--ink); }
+        .pollutants button.on { color: var(--ink); background: var(--chip); }
+
+        /* ── Controles y atribución ──────────────────────────────── */
+        .maplibregl-ctrl-group {
+            background: var(--solid) !important; border: 1px solid var(--hair) !important;
+            border-radius: 9px !important;
+            box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.55) !important;
+            overflow: hidden; transition: background 0.6s, border-color 0.6s;
+        }
+        .maplibregl-ctrl-group button { width: 30px !important; height: 30px !important; background: transparent !important; }
+        .maplibregl-ctrl-group button + button { border-top: 1px solid var(--hair); }
+        .maplibregl-ctrl-icon { filter: var(--ctrl-filter); opacity: 0.55; }
+        .maplibregl-ctrl-icon:hover { opacity: 0.9; }
+        .attrib {
+            position: fixed; left: 12px; bottom: 8px; z-index: 500; pointer-events: none;
+            font-size: 9px; letter-spacing: 0.02em; color: var(--ink-3); transition: color 0.6s;
+        }
+
+        /* ── Popup de estación ───────────────────────────────────── */
+        .maplibregl-popup-content {
+            background: var(--solid); color: var(--ink);
+            border: 1px solid var(--hair); border-radius: 11px;
+            box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.75);
+            padding: 13px 15px; font-family: var(--sans);
+            transition: background 0.4s, color 0.4s, border-color 0.4s;
+        }
+        .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--solid); }
+        .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--solid); }
+        .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--solid); }
+        .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--solid); }
+        .station-popup h3 {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+            font-size: 12px; font-weight: 600; letter-spacing: 0.01em; margin-bottom: 8px;
+        }
+        .station-popup h3 span { font-size: 9px; font-weight: 500; letter-spacing: 0.12em; color: var(--ink-3); }
+        .station-popup .v { display: flex; justify-content: space-between; gap: 16px; font-size: 10.5px; padding: 1.5px 0; }
+        .station-popup .k { color: var(--ink-2); }
+        .station-popup .n { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+        .station-popup .n.lo { color: var(--lo); }
+        .station-popup .n.md { color: var(--md); }
+        .station-popup .n.hi { color: var(--hi); }
+
+        /* ── Estaciones ──────────────────────────────────────────── */
+        .station-icon { position: absolute; width: 0; height: 0; cursor: pointer; }
+        .station-halo {
+            position: absolute; top: 0; left: 0; transform: translate(-50%, -50%);
+            border-radius: 50%; pointer-events: none; opacity: 0; filter: blur(7px);
+            transition: width var(--halo-t, 0.5s) ease-out, height var(--halo-t, 0.5s) ease-out, opacity var(--halo-t, 0.5s) ease-out;
+        }
+        .station-core {
+            position: absolute; top: 0; left: 0; width: 12px; height: 12px;
+            transform: translate(-50%, -50%); border-radius: 50%;
+            background: transparent;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 0 0 2px var(--dot-ring), 0 1px 5px rgba(0, 0, 0, 0.4);
+            transition: transform 0.2s ease, background var(--halo-t, 0.3s) ease, box-shadow 0.6s ease;
+        }
+        .station-core:hover { transform: translate(-50%, -50%) scale(1.45); }
+        .station-core.dim { background: transparent !important; box-shadow: inset 0 0 0 1px var(--ink-3); }
+
+        /* ── Carga ───────────────────────────────────────────────── */
+        #ld {
+            position: fixed; inset: 0; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+            background: var(--bg); transition: opacity 0.5s ease;
+        }
         #ld.off { opacity: 0; pointer-events: none; }
+        #ld .mark { font-family: var(--serif); font-size: 20px; letter-spacing: 0.01em; color: var(--ink); }
+        #ld .sub { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+
+        @media (max-width: 640px) {
+            .brand { top: 14px; left: 14px; padding: 11px 13px; }
+            .brand .scale { display: none; }
+            .console { width: calc(100vw - 28px); bottom: 14px; padding: 11px 12px 9px; gap: 8px; }
+            .sliders { gap: 12px; }
+            .pollutants button { font-size: 9px; }
+            .maplibregl-ctrl-group { display: none; }
+            .attrib { left: 14px; bottom: auto; top: 74px; }
+        }
     </style>
 </head>
 <body>
-    <div id="ld"><div style="text-align:center"><div style="font-size:26px;margin-bottom:16px">AIRE CDMX</div><div id="lm">Cargando...</div></div></div>
+    <div id="ld"><div class="mark">Aire CDMX</div><div class="sub" id="lm">Cargando datos</div></div>
     <div id="map"></div>
-    <div class="info-panel">
-        <h2>AIRE CDMX 2004-2024</h2>
-        <p>Sonificación de calidad del aire</p>
-        <p>RAMA - Red Automática de Monitoreo Atmosférico</p>
-        <div class="legend">
-            <span><i style="background:#6bcb77"></i>Bajo</span>
-            <span><i style="background:#ffd93d"></i>Medio</span>
-            <span><i style="background:#ff6b6b"></i>Alto</span>
+
+    <header class="brand">
+        <h1>Aire CDMX</h1>
+        <p>Calidad del aire · 2004–2024</p>
+        <div class="scale">
+            <span><i class="lo"></i>Bajo</span>
+            <span><i class="md"></i>Medio</span>
+            <span><i class="hi"></i>Alto</span>
         </div>
-    </div>
-    <div class="control-panel">
-        <div class="time-display">
-            <div class="date" id="dD">2004-01-01</div>
-            <div class="sub" id="dH">promedio diario</div>
-        </div>
-        <div class="slider-row">
-            <span class="slider-lbl" id="sMinLbl">2004</span>
-            <input type="range" id="sD" min="0" max="0" value="0">
-            <span class="slider-lbl" id="sMaxLbl">2024</span>
-        </div>
-        <div class="ctrl-row">
-            <div class="yr-sel"><select id="ySel" title="Periodo" onchange="changeView(this.value)"></select></div>
-            <div class="pb">
-                <button id="playBtn" onclick="togglePlay()">▶ Play</button>
-                <button onclick="spd(1)" id="s1">1x</button>
-                <button onclick="spd(2)" id="s2">2x</button>
-                <button onclick="spd(4)" id="s4">4x</button>
-                <button id="relBtn" onclick="toggleRelief()">⛰ Relieve</button>
-                <button id="thmBtn" onclick="toggleTheme()">☀ Claro</button>
+    </header>
+
+    <div class="attrib">© OpenStreetMap · OpenFreeMap</div>
+
+    <section class="console" aria-label="Controles">
+        <div class="head">
+            <button id="playBtn" class="play" type="button" aria-label="Reproducir" aria-pressed="false">
+                <svg class="i-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.5 5.4v13.2L19 12Z"/></svg>
+                <svg class="i-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.4" height="14" rx="1"/><rect x="13.6" y="5" width="3.4" height="14" rx="1"/></svg>
+            </button>
+            <div class="clock">
+                <span id="dD">01 ene 2004</span>
+                <span class="sep">·</span>
+                <span id="dH">00:00</span>
             </div>
-            <div class="pol-sel" id="pSel"></div>
-            <div class="osc-s" id="oB" title="Estado del puente map/osc_bridge.js (ws://localhost:8080)"><div class="osc-dot" id="oD"></div><span id="oT">OSC: sin puente</span></div>
+            <div class="speeds" id="sSel" role="group" aria-label="Velocidad de reproducción">
+                <button type="button" data-s="1" class="on">1×</button>
+                <button type="button" data-s="2">2×</button>
+                <button type="button" data-s="4">4×</button>
+            </div>
+            <div class="speeds" id="gSel" role="group" aria-label="Granularidad">
+                <button type="button" data-g="day" class="on">Día</button>
+                <button type="button" data-g="week">Semana</button>
+                <button type="button" data-g="year">Año</button>
+            </div>
+            <div class="osc" id="oStat" title="Puente OSC desconectado"><i id="oD"></i><span>OSC</span></div>
         </div>
-    </div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <div class="sliders">
+            <label class="slider">
+                <span class="lbl" id="sMinLbl">2004</span>
+                <input type="range" id="sD" min="0" max="365" value="0" aria-label="Periodo">
+                <span class="lbl" id="sMaxLbl">2024</span>
+            </label>
+            <label class="slider">
+                <span class="lbl">00h</span>
+                <input type="range" id="sH" min="0" max="23" value="0" aria-label="Hora">
+                <span class="lbl">23h</span>
+            </label>
+        </div>
+        <div class="pollutants" id="pSel" role="group" aria-label="Contaminante"></div>
+    </section>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script>
     (function(){
-        var C={base:'../data/',yearsUrl:'../data/years.json',center:[19.40,-99.15],zoom:12,interval:600};
-        var PC={CO:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,2,5]},NO:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,20,50]},NO2:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,30,60]},NOX:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,40,80]},O3:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,40,80]},PM25:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,25,50]},SO2:{lo:'#6bcb77',md:'#ffd93d',hi:'#ff6b6b',r:[0,10,20]}};
-        var ZONES=['Norte','Sur','Este','Oeste'];
-        var CITIES=[
-            {name:'Ciudad de México',lat:19.4326,lon:-99.1332,t:'major'},
-            {name:'Ecatepec',lat:19.6019,lon:-99.0506,t:'major'},
-            {name:'Nezahualcóyotl',lat:19.4006,lon:-99.0148,t:'major'},
-            {name:'Naucalpan',lat:19.4785,lon:-99.2396,t:'major'},
-            {name:'Tlalnepantla',lat:19.5400,lon:-99.1950,t:'major'},
-            {name:'Texcoco',lat:19.5119,lon:-98.8829,t:'major'},
-            {name:'Chalco',lat:19.2647,lon:-98.8978,t:'major'},
-            {name:'Cuautitlán Izcalli',lat:19.6469,lon:-99.2165,t:'major'},
-            {name:'Chimalhuacán',lat:19.4208,lon:-98.9547,t:'major'},
-            {name:'Iztapalapa',lat:19.3553,lon:-99.0622,t:'sub'},
-            {name:'Gustavo A. Madero',lat:19.4873,lon:-99.1136,t:'sub'},
-            {name:'Coyoacán',lat:19.3467,lon:-99.1617,t:'sub'},
-            {name:'Tlalpan',lat:19.2882,lon:-99.1672,t:'sub'},
-            {name:'Xochimilco',lat:19.2572,lon:-99.1030,t:'sub'},
-            {name:'Azcapotzalco',lat:19.4869,lon:-99.1859,t:'sub'},
-            {name:'Miguel Hidalgo',lat:19.4319,lon:-99.1956,t:'sub'},
-            {name:'Álvaro Obregón',lat:19.3587,lon:-99.2250,t:'sub'},
-            {name:'Cuajimalpa',lat:19.3558,lon:-99.2994,t:'sub'},
-            {name:'Tláhuac',lat:19.2869,lon:-99.0031,t:'sub'},
-            {name:'Milpa Alta',lat:19.1922,lon:-99.0231,t:'sub'},
-            {name:'Atizapán',lat:19.5562,lon:-99.2675,t:'sub'},
-            {name:'Coacalco',lat:19.6317,lon:-99.1008,t:'sub'},
-            {name:'Tultitlán',lat:19.6458,lon:-99.1694,t:'sub'},
-            {name:'Huixquilucan',lat:19.3969,lon:-99.3150,t:'sub'},
-            {name:'Ixtapaluca',lat:19.3186,lon:-98.8822,t:'sub'}
+        /* Un archivo por año: se cargan todos (16 MB) y la línea de tiempo cruza
+           años sin lógica especial. */
+        var DATA_BASE = '../data/';
+        var YEARS_URL = '../data/years.json';
+        var CENTER = [-99.15, 19.40];
+        var BASE_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+        var POLLUTANTS = ['CO', 'NO', 'NO2', 'NOX', 'O3', 'PM25', 'SO2'];
+        /* Umbrales (bajo/medio) y colores de la escala, una sola fuente de verdad */
+        var LIMITS = {CO: [2, 5], NO: [20, 50], NO2: [30, 60], NOX: [40, 80], O3: [40, 80], PM25: [25, 50], SO2: [10, 20]};
+        /* Zonas cardinales: cada una es una bocina del arreglo cuadrafónico */
+        var ZONES = ['Norte', 'Sur', 'Este', 'Oeste'];
+        var SCALE = {lo: '#6f9a7a', md: '#c49a3a', hi: '#b45f48'};
+        var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        var INTERVAL = 500;
+
+        /* ── Paleta por hora del día ──────────────────────────────────────────
+           Cada clave define el ánimo del mapa y de la interfaz a esa hora; entre
+           claves se interpola, así que el paisaje pasa de noche a amanecer, día
+           y atardecer sin saltos. Los colores de datos (SCALE) no cambian. */
+        var MOODS = [
+            {h: 0,  bg: '#0d1013', land: '#14181a', water: '#10333d', green: '#122019', building: '#171b1d',
+                     roadMinor: '#232a2c', roadMajor: '#323a3d', roadMotorway: '#3c4548', label: '#9c9c96', accent: '#c4a061'},
+            {h: 4,  bg: '#0f1319', land: '#171b21', water: '#16303c', green: '#14221e', building: '#1a1f25',
+                     roadMinor: '#262d32', roadMajor: '#353e45', roadMotorway: '#404950', label: '#a1a1a2', accent: '#c9a468'},
+            {h: 5,  bg: '#191623', land: '#221d2b', water: '#29323f', green: '#1e2a24', building: '#241f2c',
+                     roadMinor: '#352e3d', roadMajor: '#4e3b45', roadMotorway: '#6f4b46', label: '#c2b2b6', accent: '#d6a06a'},
+            {h: 6,  bg: '#3a2a2a', land: '#43302e', water: '#33424a', green: '#333a2a', building: '#46322f',
+                     roadMinor: '#6b4a3c', roadMajor: '#94664a', roadMotorway: '#b8835a', label: '#f0d3b8', accent: '#e0a166'},
+            {h: 7,  bg: '#e9cba9', land: '#e2c5a1', water: '#c6d7da', green: '#ced7b0', building: '#dcbc95',
+                     roadMinor: '#dcc09c', roadMajor: '#cca072', roadMotorway: '#ba844f', label: '#55432f', accent: '#c07d38'},
+            {h: 8,  bg: '#e6d3bb', land: '#ded0b8', water: '#c6d6d8', green: '#cfd7b0', building: '#d8c7ad',
+                     roadMinor: '#d8c7ac', roadMajor: '#c5ad8a', roadMotorway: '#b1936a', label: '#524233', accent: '#b07a3c'},
+            {h: 9,  bg: '#eee5d7', land: '#e8dfd0', water: '#c6d8d9', green: '#d2dcc4', building: '#dfd5c6',
+                     roadMinor: '#dcd2c1', roadMajor: '#cbbfa9', roadMotorway: '#bcab93', label: '#4c4a43', accent: '#a5803c'},
+            {h: 12, bg: '#f1eee7', land: '#e9e5db', water: '#c4d8de', green: '#d2e0c4', building: '#e0dbd0',
+                     roadMinor: '#dad4c9', roadMajor: '#c9c2b5', roadMotorway: '#bab2a4', label: '#4c5157', accent: '#9a7b3f'},
+            {h: 16, bg: '#f0e6d2', land: '#e9dfcc', water: '#c6d7d4', green: '#d5ddbd', building: '#e2d5bf',
+                     roadMinor: '#dcd2be', roadMajor: '#cbbca2', roadMotorway: '#bcaa8c', label: '#544d3e', accent: '#a5803c'},
+            {h: 17, bg: '#efdcc0', land: '#e8d5b6', water: '#c6d6d2', green: '#d3d7b8', building: '#e1cfae',
+                     roadMinor: '#dcd0b6', roadMajor: '#ccb693', roadMotorway: '#bda377', label: '#554a38', accent: '#a97e3c'},
+            {h: 18, bg: '#ecc59a', land: '#e5c298', water: '#ccdcd8', green: '#d2cfae', building: '#dfba90',
+                     roadMinor: '#dfc09a', roadMajor: '#cfa273', roadMotorway: '#bd8752', label: '#5c4630', accent: '#c07d38'},
+            {h: 19, bg: '#45302a', land: '#4c352d', water: '#47535a', green: '#464430', building: '#4f382e',
+                     roadMinor: '#8c6142', roadMajor: '#b58155', roadMotorway: '#d99f68', label: '#ffe0c0', accent: '#eeae6a'},
+            {h: 20, bg: '#35251f', land: '#3d2a23', water: '#414d55', green: '#40412c', building: '#423026',
+                     roadMinor: '#7a5438', roadMajor: '#a9734a', roadMotorway: '#c98f5c', label: '#f4d6b6', accent: '#f0b06a'},
+            {h: 22, bg: '#101318', land: '#161a1e', water: '#123540', green: '#14231d', building: '#191e22',
+                     roadMinor: '#242b2e', roadMajor: '#333b3f', roadMotorway: '#3d464a', label: '#a3a29c', accent: '#c4a061'},
+            {h: 24, bg: '#0d1013', land: '#14181a', water: '#10333d', green: '#122019', building: '#171b1d',
+                     roadMinor: '#232a2c', roadMajor: '#323a3d', roadMotorway: '#3c4548', label: '#9c9c96', accent: '#c4a061'}
         ];
-        var map,streetLayer,reliefLayer,cityLabelsLayer,reliefOn=false,lightOn=false,mk={};
-        // La app trabaja con promedios diarios por estación (los genera
-        // convert_data.py); la línea de tiempo agrupa esos días en periodos de
-        // día, semana o año, según el paso elegido.
-        var allData={},stAll={},st={},pollInfo={},years=[],periods=[],pi=0;
-        var pol='CO',step='day',extent='all',play=false,iv=null,sp=1;
-        var osc=null,oscOn=false,fitted=false,openCode=null;
 
-        function lm(t){var e=document.getElementById('lm');if(e)e.textContent=t;}
-        function hide(){var e=document.getElementById('ld');if(e){e.classList.add('off');setTimeout(function(){e.remove()},500);}}
-
-        window.addEventListener('DOMContentLoaded',function(){
-            lm('Iniciando mapa...');
-            map=L.map('map',{center:C.center,zoom:C.zoom,zoomControl:true});
-            streetLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-                attribution:'© OpenStreetMap contributors',maxZoom:19
-            }).addTo(map);
-            reliefLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',{
-                attribution:'Tiles © Esri — Source: Esri Shaded Relief',maxNativeZoom:13,maxZoom:19
-            });
-            cityLabelsLayer=L.layerGroup(CITIES.map(function(c){
-                return L.marker([c.lat,c.lon],{
-                    interactive:false,
-                    icon:L.divIcon({
-                        className:'city-label-icon',
-                        iconSize:[0,0],
-                        iconAnchor:[0,0],
-                        html:'<div class="city-lbl '+c.t+'">'+c.name+'</div>'
-                    })
-                });
-            }));
-            lm('Cargando datos...');
-            fetch(C.yearsUrl).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(idx){
-                years=idx.years;
-                // Los JSON son promedios diarios (~600 KB por año): se cargan
-                // todos de una vez y así la línea de tiempo puede cruzar años
-                // sin lógica especial.
-                return Promise.all(years.map(function(y){
-                    return fetch(C.base+'air_quality_'+y+'.json').then(function(r){
-                        if(!r.ok)throw new Error('HTTP '+r.status+' en '+y);return r.json();
-                    }).then(function(d){
-                        for(var date in d.data)allData[date]=d.data[date];
-                        for(var code in d.stations)stAll[code]=d.stations[code];
-                        if(!pollInfo.CO)pollInfo=d.pollutant_info;
-                    });
-                }));
-            }).then(function(){
-                setupViewSel();
-                setupCtrl();
-                setupOSC();
-                rebuildAll();
-                hide();
-            }).catch(function(e){
-                console.error(e);lm('Error: '+e.message);setTimeout(hide,6000);
-            });
-        });
-
-        // ------------------- línea de tiempo por periodos -------------------
-
-        function allDates(){return Object.keys(allData).sort();}
-
-        function extentDates(){
-            var ds=allDates();
-            if(extent==='all')return ds;
-            return ds.filter(function(d){return d.slice(0,4)===extent;});
-        }
-
-        function mondayOf(ds){
-            var p=ds.split('-');
-            var t=Date.UTC(+p[0],+p[1]-1,+p[2]);
-            var dow=new Date(t).getUTCDay();            // 0 = domingo
-            return new Date(t-(dow===0?6:dow-1)*86400000).toISOString().slice(0,10);
-        }
-
-        function isoInfo(monday){
-            var p=monday.split('-');
-            var t=Date.UTC(+p[0],+p[1]-1,+p[2]);
-            var thursday=t+(3-((new Date(t).getUTCDay()+6)%7))*86400000;
-            var year=new Date(thursday).getUTCFullYear();
-            var jan1=Date.UTC(year,0,1);
-            return {week:Math.floor((thursday-jan1)/(7*86400000))+1,year:year};
-        }
-
-        // Un periodo es {label, detail, dates[]}: un día, una semana o un año.
-        function buildPeriods(){
-            var ds=extentDates();
-            if(step==='day'){
-                return ds.map(function(d){return {label:d,detail:'promedio diario',dates:[d]};});
-            }
-            var groups={},keys=[];
-            ds.forEach(function(d){
-                var k=step==='year'?d.slice(0,4):mondayOf(d);
-                if(!groups[k]){groups[k]=[];keys.push(k);}
-                groups[k].push(d);
-            });
-            keys.sort();
-            return keys.map(function(k){
-                if(step==='year'){
-                    return {label:k,detail:'promedio anual · '+groups[k].length+' días',dates:groups[k]};
-                }
-                var w=isoInfo(k);
-                return {label:w.year+'-S'+String(w.week).padStart(2,'0'),
-                        detail:'semana del '+k+' · '+groups[k].length+' días',dates:groups[k]};
-            });
-        }
-
-        // Estaciones que reportaron algo en el periodo visible.
-        function buildRoster(){
-            var ds=extentDates(),seen={};
-            for(var i=0;i<ds.length;i++){
-                var dd=allData[ds[i]];
-                for(var p in dd){for(var c in dd[p]){if(dd[p][c]!=null)seen[c]=1;}}
-            }
-            st={};
-            for(var code in seen)if(stAll[code])st[code]=stAll[code];
-        }
-
-        function rebuildAll(){
-            var keep=periods[pi]?periods[pi].dates[0]:null;
-            buildRoster();
-            drawStations();
-            periods=buildPeriods();
-            pi=0;
-            if(keep){
-                for(var i=0;i<periods.length;i++){
-                    if(periods[i].dates.indexOf(keep)>=0){pi=i;break;}
-                }
-            }
-            var sd=document.getElementById('sD');
-            if(sd){sd.max=Math.max(periods.length-1,0);sd.value=pi;}
-            setSliderLabels();
-            upd();sOSC();
-        }
-
-        function setPeriod(i){
-            if(!periods.length)return;
-            pi=Math.max(0,Math.min(i,periods.length-1));
-            var sd=document.getElementById('sD');if(sd)sd.value=pi;
-            upd();sOSC();
-        }
-
-        function setSliderLabels(){
-            var a=document.getElementById('sMinLbl'),b=document.getElementById('sMaxLbl');
-            if(!a||!b)return;
-            if(extent==='all'){a.textContent=years[0];b.textContent=years[years.length-1];}
-            else{a.textContent='Ene';b.textContent='Dic';}
-        }
-
-        // El menú de años elige a la vez el alcance y el paso de la línea de tiempo.
-        function setupViewSel(){
-            var sel=document.getElementById('ySel');
-            sel.innerHTML='<optgroup label="Serie completa '+years[0]+'-'+years[years.length-1]+'">'
-                +'<option value="all:day">Por día</option>'
-                +'<option value="all:week">Por semana</option>'
-                +'<option value="all:year">Por año</option></optgroup>'
-                +'<optgroup label="Un año (por día)">'
-                +years.map(function(y){return '<option value="'+y+':day">'+y+'</option>'}).join('')
-                +'</optgroup>';
-            sel.value=extent+':'+step;
-        }
-
-        window.changeView=function(v){
-            var parts=v.split(':');
-            extent=parts[0];step=parts[1];
-            rebuildAll();
+        /* Capas que no aportan aquí: nombres de calle y localidades menores */
+        var HIDDEN_LAYERS = [
+            'road_oneway', 'road_oneway_opposite',
+            'place_other', 'place_suburb', 'place_village', 'place_state',
+            'place_country_other', 'place_country_minor', 'place_country_major'
+        ];
+        /* Los pueblos no aparecen en el encuadre general, sí al acercarse */
+        var LABEL_MINZOOM = {'place_town': 11.2};
+        /* Sólo se aplican propiedades válidas para cada tipo de capa */
+        var PAINT_PROPS = {
+            fill: ['fill-color', 'fill-outline-color'],
+            line: ['line-color'],
+            symbol: ['text-color', 'text-halo-color'],
+            background: ['background-color']
         };
 
-        function drawStations(){
-            for(var code in mk)map.removeLayer(mk[code]);
-            mk={};
-            for(var code in st){var s=st[code];
-                var icon=L.divIcon({
-                    className:'station-icon',
-                    iconSize:[0,0],
-                    iconAnchor:[0,0],
-                    popupAnchor:[0,-8],
-                    html:'<div class="station-light" id="l_'+code+'"></div><div class="station-core" id="c_'+code+'"></div>'
-                });
-                var m=L.marker([s.lat,s.lon],{icon:icon}).addTo(map);
-                m.code=code;m.bindPopup('<div class="station-popup"><h3>'+s.name+' ('+code+')</h3><div id="p_'+code+'">...</div></div>');
-                m.on('popupopen',function(){openCode=code;upd();});
-                mk[code]=m;
-            }
-            var all=Object.values(st).map(function(s){return[s.lat,s.lon]});
-            if(!fitted&&all.length){map.fitBounds(L.latLngBounds(all).pad(0.1));fitted=true;}
+        var map, popup, allData = {}, stations = {}, pollutantInfo = {}, dates = [], periods = [], markers = {};
+        var targets = [], painted = {}, lastPalette = null, lastPaintAt = 0, paintTimeout = null, lightness = 0;
+        var openCode = null, pIndex = 0, gran = 'day', hour = 0, playing = false, timer = null, speed = 1;
+        var pollutant = 'CO', socket = null, socketUp = false, heartbeat = null;
+
+        function $(id){ return document.getElementById(id); }
+        function pad(n){ return (n < 10 ? '0' : '') + n; }
+        function fmtDate(key){
+            var p = key.split('-');
+            return p[2] + ' ' + MONTHS[+p[1] - 1] + ' ' + p[0];
+        }
+        function level(v, p){
+            var lim = LIMITS[p];
+            return v < lim[0] ? 'lo' : v < lim[1] ? 'md' : 'hi';
+        }
+        function each(list, fn){ Array.prototype.forEach.call(list, fn); }
+        function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+
+        function rgb(hex){
+            var n = parseInt(hex.slice(1), 16);
+            return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+        }
+        function toHex(c){
+            return '#' + c.map(function(v){
+                var s = clamp(Math.round(v), 0, 255).toString(16);
+                return s.length === 1 ? '0' + s : s;
+            }).join('');
+        }
+        function mix(a, b, t){
+            var x = rgb(a), y = rgb(b);
+            return toHex([0, 1, 2].map(function(i){ return x[i] + (y[i] - x[i]) * t; }));
+        }
+        function alpha(hex, a){
+            var c = rgb(hex);
+            return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+        }
+        function lum(hex){
+            var c = rgb(hex);
+            return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
         }
 
-        function setupCtrl(){
-            var sd=document.getElementById('sD');
-            sd.oninput=function(){setPeriod(+this.value)};
-            var sel=document.getElementById('pSel');
-            Object.keys(PC).forEach(function(c){
-                var b=document.createElement('button');b.textContent=c;b.style.setProperty('--pc',PC[c].lo);
-                if(c===pol)b.className='on';
-                b.onclick=function(){pol=c;sel.querySelectorAll('button').forEach(function(x){x.className=x.textContent===c?'on':''});upd();sOSC()};
-                sel.appendChild(b);
+        function paletteAt(h){
+            var a = MOODS[0], b = MOODS[1];
+            for(var i = 0; i < MOODS.length - 1; i++){
+                if(h >= MOODS[i].h && h <= MOODS[i + 1].h){ a = MOODS[i]; b = MOODS[i + 1]; break; }
+            }
+            var t = b.h === a.h ? 0 : (h - a.h) / (b.h - a.h);
+            t = t * t * (3 - 2 * t);   /* el cambio se acelera a media transición */
+            var out = {};
+            Object.keys(a).forEach(function(k){
+                if(k === 'h') return;
+                out[k] = mix(a[k], b[k], t);
             });
-        }
-
-        function hexToRgb(hex){
-            var n=parseInt(hex.slice(1),16);
-            return ((n>>16)&255)+','+((n>>8)&255)+','+(n&255);
-        }
-
-        // Promedio del contaminante en un periodo (día, semana o año) para una
-        // estación: media de los promedios diarios disponibles.
-        function periodValue(p,code,pollutant){
-            var ds=p.dates,sum=0,n=0;
-            for(var i=0;i<ds.length;i++){
-                var dd=allData[ds[i]];if(!dd)continue;
-                var pd=dd[pollutant];if(!pd)continue;
-                var v=pd[code];if(v!=null){sum+=v;n++;}
-            }
-            return n?sum/n:null;
-        }
-
-        function renderPopup(code,p){
-            var el=document.getElementById('p_'+code);if(!el)return;
-            var h='';
-            for(var key in pollInfo){
-                var info=pollInfo[key],v=periodValue(p,code,key);
-                var txt=v!=null?v.toFixed(1)+' '+info.unit:'Sin datos',cl='';
-                if(v!=null){var cc=PC[key];cl=v>=cc.r[2]?'hi':v>=cc.r[1]?'md':'lo';}
-                h+='<div class="v '+cl+'">'+info.name+': '+txt+'</div>';
-            }
-            el.innerHTML=h;
-        }
-
-        function upd(){
-            if(!periods.length)return;
-            var p=periods[pi],c=PC[pol];
-            document.getElementById('dD').textContent=p.label;
-            document.getElementById('dH').textContent=p.detail;
-            for(var code in mk){
-                var v=periodValue(p,code,pol);
-                var lEl=document.getElementById('l_'+code),cEl=document.getElementById('c_'+code);
-                if(!lEl||!cEl)continue;
-                if(v!=null){
-                    var col=v<c.r[1]?c.lo:v<c.r[2]?c.md:c.hi;
-                    var rgb=hexToRgb(col);
-                    var norm=Math.min(v/(c.r[2]*1.3),1.6);
-                    var sz=Math.round(52+norm*85);
-                    lEl.style.width=sz+'px';
-                    lEl.style.height=sz+'px';
-                    lEl.style.opacity=Math.min((lightOn?0.72:0.55)+norm*0.35,1);
-                    if(lightOn){
-                        lEl.style.background='radial-gradient(circle, rgba('+rgb+',0.95) 0%, rgba('+rgb+',0.78) 12%, rgba('+rgb+',0.42) 30%, rgba('+rgb+',0.15) 55%, rgba('+rgb+',0) 100%)';
-                        cEl.style.background='radial-gradient(circle, #fff 0%, '+col+' 55%, rgba('+rgb+',0) 100%)';
-                    }else{
-                        lEl.style.background='radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba('+rgb+',0.85) 8%, rgba('+rgb+',0.45) 24%, rgba('+rgb+',0.16) 48%, rgba('+rgb+',0.04) 72%, rgba('+rgb+',0) 100%)';
-                        cEl.style.background='radial-gradient(circle, #fff 0%, '+col+' 45%, rgba('+rgb+',0) 100%)';
-                    }
-                    cEl.style.opacity='1';
-                }else{
-                    lEl.style.width='20px';
-                    lEl.style.height='20px';
-                    lEl.style.opacity='0.2';
-                    lEl.style.background='radial-gradient(circle, rgba(140,160,180,0.5) 0%, rgba(140,160,180,0) 100%)';
-                    cEl.style.background='radial-gradient(circle, rgba(140,160,180,0.6) 0%, rgba(140,160,180,0) 70%)';
-                    cEl.style.opacity='0.4';
-                }
-            }
-            if(openCode)renderPopup(openCode,p);
-        }
-
-        // Cada tick avanza un periodo (día, semana o año).
-        function tick(){
-            setPeriod(pi+1>=periods.length?0:pi+1);
-        }
-
-        function togglePlay(){
-            play=!play;var b=document.getElementById('playBtn');
-            if(play){b.textContent='⏸ Pause';b.className='on';iv=setInterval(tick,C.interval/sp);}
-            else{b.textContent='▶ Play';b.className='';clearInterval(iv);iv=null;}
-        }
-        window.togglePlay=togglePlay;
-        window.spd=function(s){sp=s;['s1','s2','s4'].forEach(function(id,i){document.getElementById(id).className=(i+1===s)?'on':''});if(play){clearInterval(iv);togglePlay();togglePlay();}};
-        window.toggleRelief=function(){
-            reliefOn=!reliefOn;
-            var b=document.getElementById('relBtn');
-            if(reliefOn){
-                if(map.hasLayer(streetLayer))map.removeLayer(streetLayer);
-                reliefLayer.addTo(map);
-                cityLabelsLayer.addTo(map);
-                document.body.classList.add('relief-mode');
-                b.className='on';
-            }else{
-                if(map.hasLayer(reliefLayer))map.removeLayer(reliefLayer);
-                if(map.hasLayer(cityLabelsLayer))map.removeLayer(cityLabelsLayer);
-                streetLayer.addTo(map);
-                document.body.classList.remove('relief-mode');
-                b.className='';
-            }
-        };
-        window.toggleTheme=function(){
-            lightOn=!lightOn;
-            var b=document.getElementById('thmBtn');
-            if(lightOn){
-                document.body.classList.add('light-mode');
-                b.textContent='🌙 Oscuro';
-                b.className='on';
-            }else{
-                document.body.classList.remove('light-mode');
-                b.textContent='☀ Claro';
-                b.className='';
-            }
-            upd();
-        };
-
-        // El punto verde mide el puente map/osc_bridge.js (ws://localhost:8080),
-        // no a SuperCollider: el puente es quien traduce WebSocket → OSC. Por eso
-        // tener SuperCollider abierto no basta para que se ponga en verde.
-        // Se reintenta solo, así arrancar el puente después de abrir la página no
-        // obliga a recargarla.
-        function setupOSC(){
-            var url='ws://localhost:8080',RETRY=3000;
-            function mark(on){
-                oscOn=on;
-                document.getElementById('oD').className=on?'osc-dot ok':'osc-dot';
-                document.getElementById('oT').textContent=on?'OSC: on':'OSC: sin puente';
-            }
-            function connect(){
-                try{osc=new WebSocket(url);}catch(e){setTimeout(connect,RETRY);return;}
-                osc.onopen=function(){mark(true);sOSC();}; // sonar el periodo ya visible
-                osc.onerror=function(){oscOn=false;};
-                osc.onclose=function(){mark(false);setTimeout(connect,RETRY);};
-            }
-            mark(false);
-            connect();
-        }
-        // Promedio del contaminante activo en cada zona cardinal. Las estaciones
-        // del año cargado se agrupan con su campo `zone` (calculado en
-        // convert_data.py); las zonas son las bocinas del arreglo cuadrafónico.
-        // Promedio del contaminante activo en cada zona cardinal durante el
-        // periodo actual. Las estaciones se agrupan con su campo `zone`
-        // (calculado en convert_data.py); cada zona es una bocina del arreglo
-        // cuadrafónico.
-        function zoneAvgs(p){
-            var acc={},out={};
-            ZONES.forEach(function(z){acc[z]={sum:0,n:0}});
-            for(var c in st){
-                var z=st[c].zone;
-                if(!acc[z])continue;
-                var v=periodValue(p,c,pol);
-                if(v>0){acc[z].sum+=v;acc[z].n++;}
-            }
-            ZONES.forEach(function(z){out[z]=acc[z].n?acc[z].sum/acc[z].n:0});
             return out;
         }
 
-        // OSC: /aire [periodo] [contaminante] [Norte Sur Este Oeste]
-        function sOSC(){
-            if(!oscOn||!periods.length)return;
-            var p=periods[pi];if(!p)return;
-            var avgs=zoneAvgs(p);
-            var m={address:'/aire',args:[{type:'s',value:p.label},{type:'s',value:pol}]};
-            ZONES.forEach(function(z){m.args.push({type:'f',value:Math.round(avgs[z]*100)/100})});
-            try{osc.send(JSON.stringify(m))}catch(e){}
+        function paintTable(p){
+            return {
+                background: {'background-color': p.bg},
+                landuse_residential: {'fill-color': p.land},
+                landuse_park: {'fill-color': p.green},
+                landcover_wood: {'fill-color': p.green},
+                water: {'fill-color': p.water},
+                waterway: {'line-color': p.water},
+                building: {'fill-color': p.building, 'fill-outline-color': mix(p.building, p.bg, 0.35)},
+                highway_path: {'line-color': mix(p.roadMinor, p.bg, 0.3)},
+                highway_minor: {'line-color': p.roadMinor},
+                highway_major_casing: {'line-color': mix(p.roadMajor, p.bg, 0.5)},
+                highway_major_inner: {'line-color': p.roadMajor},
+                highway_major_subtle: {'line-color': mix(p.roadMajor, p.bg, 0.35)},
+                highway_motorway_casing: {'line-color': mix(p.roadMotorway, p.bg, 0.45)},
+                highway_motorway_inner: {'line-color': p.roadMotorway},
+                highway_motorway_subtle: {'line-color': mix(p.roadMotorway, p.bg, 0.3)},
+                tunnel_motorway_casing: {'line-color': mix(p.roadMotorway, p.bg, 0.5)},
+                tunnel_motorway_inner: {'line-color': p.roadMotorway},
+                /* Resto de capas por tipo de fuente: vías férreas, pistas, muelles */
+                transportation: {'line-color': mix(p.roadMinor, p.bg, 0.35), 'fill-color': mix(p.land, p.bg, 0.4)},
+                aeroway: {'line-color': mix(p.roadMinor, p.bg, 0.25), 'fill-color': mix(p.land, p.bg, 0.5)},
+                boundary: {'line-color': mix(p.label, p.bg, 0.72)},
+                landcover: {'fill-color': p.green},
+                water_name: {'text-color': mix(p.water, p.label, 0.6), 'text-halo-color': p.bg},
+                label: {'text-color': p.label, 'text-halo-color': alpha(p.bg, 0.85)}
+            };
+        }
+
+        function ruleFor(target, table){
+            return table[target.id] || table[target.sourceLayer] ||
+                (target.type === 'background' ? table.background : (target.type === 'symbol' ? table.label : null));
+        }
+
+        /* Salta repintados imperceptibles: entre horas vecinas el ánimo apenas
+           cambia, y cada repintado del estilo completo cuesta cuadros. */
+        function paletteMoved(p){
+            if(!lastPalette) return true;
+            var keys = ['bg', 'land', 'water', 'green', 'roadMajor', 'roadMotorway', 'label'], max = 0;
+            keys.forEach(function(k){
+                var a = rgb(lastPalette[k]), b = rgb(p[k]);
+                for(var i = 0; i < 3; i++) max = Math.max(max, Math.abs(a[i] - b[i]));
+            });
+            return max >= 3;
+        }
+
+        /* Aplica paleta al mapa y al cromo de la interfaz; sólo toca lo que cambió.
+           Cada repintado del estilo completo cuesta cuadros, así que se limita a
+           ~4 veces por segundo: a 4× la hora corre rápido y el ojo no nota más. */
+        function applyPalette(force){
+            var p = paletteAt(hour);
+            var now = Date.now();
+            if(!paletteMoved(p)) return;
+            var wait = 220 - (now - lastPaintAt);
+            if(!force && wait > 0){
+                /* Llegó un cambio dentro de la ventana: se aplica al cerrarla */
+                if(!paintTimeout){
+                    paintTimeout = setTimeout(function(){
+                        paintTimeout = null;
+                        applyPalette(true);
+                    }, wait);
+                }
+                return;
+            }
+            if(paintTimeout){ clearTimeout(paintTimeout); paintTimeout = null; }
+            lastPaintAt = now;
+            lastPalette = p;
+            var table = paintTable(p);
+
+            targets.forEach(function(t){
+                var rule = ruleFor(t, table);
+                if(!rule) return;
+                var allowed = PAINT_PROPS[t.type] || [], key = t.id;
+                Object.keys(rule).forEach(function(prop){
+                    if(allowed.indexOf(prop) === -1) return;
+                    if(painted[key + '|' + prop] === rule[prop]) return;
+                    painted[key + '|' + prop] = rule[prop];
+                    map.setPaintProperty(t.id, prop, rule[prop]);
+                });
+            });
+
+            /* Cromo: tarjetas, tipografía y acentos siguen la misma hora */
+            var mapLum = lum(p.bg);
+            var card = mix(mix(p.bg, '#141619', 0.35), '#fffefa', clamp((mapLum - 0.55) / 0.32, 0, 1));
+            var lightCard = clamp((lum(card) - 0.42) / 0.14, 0, 1);
+            var ink = mix(mix('#e9e7e2', p.bg, 0.06), mix('#22252a', p.bg, 0.1), lightCard);
+            var root = document.documentElement.style;
+            lightness = mapLum;
+            root.setProperty('--bg', p.bg);
+            root.setProperty('--surface', alpha(card, 0.82));
+            root.setProperty('--solid', card);
+            root.setProperty('--ink', ink);
+            root.setProperty('--ink-2', mix(ink, card, 0.25));
+            root.setProperty('--ink-3', mix(ink, card, 0.45));
+            root.setProperty('--hair', alpha(ink, 0.09 + lightCard * 0.05));
+            root.setProperty('--chip', alpha(ink, 0.05 + lightCard * 0.03));
+            root.setProperty('--accent', p.accent);
+            root.setProperty('--ok', SCALE.lo);
+            root.setProperty('--dot-ring', mapLum > 0.42 ? 'rgba(20,22,26,0.32)' : 'rgba(255,255,255,0.6)');
+            root.setProperty('--ctrl-filter', lightCard > 0.5 ? 'none' : 'invert(1)');
+        }
+
+        /* Carga el estilo y lo prepara una sola vez (capas, rótulos, patrones) */
+        function styled(){
+            var narrow = window.innerWidth < 700;
+            return fetch(BASE_STYLE).then(function(r){
+                if(!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).then(function(style){
+                style.layers = style.layers.filter(function(l){
+                    return l['source-layer'] !== 'transportation_name' && HIDDEN_LAYERS.indexOf(l.id) === -1;
+                });
+                style.layers.forEach(function(l){
+                    if(LABEL_MINZOOM[l.id] != null) l.minzoom = Math.max(l.minzoom || 0, LABEL_MINZOOM[l.id]);
+                    /* Nombres locales en lugar de los traducidos al inglés */
+                    if((l['source-layer'] === 'place' || l['source-layer'] === 'water_name') && l.layout){
+                        l.layout['text-field'] = ['get', 'name'];
+                    }
+                    /* El patrón de bosque del estilo base no existe en el sprite */
+                    if(l.paint && l.paint['fill-pattern']) delete l.paint['fill-pattern'];
+                    /* En pantallas angostas los rótulos se achican para no desbordar */
+                    if(narrow && l.type === 'symbol' && l.layout && l.layout['text-size'] != null){
+                        var size = l.layout['text-size'];
+                        if(typeof size === 'number') l.layout['text-size'] = Math.round(size * 0.75);
+                        else if(Array.isArray(size)) l.layout['text-size'] = ['*', size, 0.75];
+                    }
+                });
+                return style;
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', function(){
+            document.documentElement.style.setProperty('--lo', SCALE.lo);
+            document.documentElement.style.setProperty('--md', SCALE.md);
+            document.documentElement.style.setProperty('--hi', SCALE.hi);
+
+            styled().then(function(style){
+                map = new maplibregl.Map({
+                    container: 'map',
+                    style: style,
+                    center: CENTER,
+                    zoom: 10.6,
+                    attributionControl: false,
+                    renderWorldCopies: false
+                });
+                map.dragRotate.disable();
+                map.touchZoomRotate.disableRotation();
+                map.keyboard.disableRotation();
+                map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'bottom-right');
+
+                targets = style.layers.map(function(l){
+                    return {id: l.id, type: l.type, sourceLayer: l['source-layer']};
+                });
+
+                popup = new maplibregl.Popup({closeButton: false, offset: 14, maxWidth: '280px', className: 'station-pop'});
+                popup.on('close', function(){ openCode = null; });
+
+                map.once('load', function(){
+                    applyPalette();
+                    load();
+                });
+            }).catch(function(err){
+                $('lm').textContent = 'No se pudo cargar el mapa';
+                console.error(err);
+            });
+        });
+
+        function load(){
+            fetch(YEARS_URL).then(function(r){
+                if(!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).then(function(idx){
+                return Promise.all(idx.years.map(function(y){
+                    return fetch(DATA_BASE + 'air_quality_' + y + '.json').then(function(r){
+                        if(!r.ok) throw new Error('HTTP ' + r.status + ' en ' + y);
+                        return r.json();
+                    }).then(function(d){
+                        for(var day in d.data) allData[day] = d.data[day];
+                        for(var code in d.stations) stations[code] = d.stations[code];
+                        if(!pollutantInfo.CO) pollutantInfo = d.pollutant_info;
+                    });
+                }));
+            }).then(function(){
+                dates = Object.keys(allData).sort();
+                buildPeriods();
+                buildStations();
+                fitStations();
+                buildControls();
+                paint();
+                connectOSC();
+                hideLoader();
+            }).catch(function(err){
+                $('lm').textContent = 'No se pudieron cargar los datos';
+                console.error(err);
+            });
+        }
+
+        /* Periodos del mapa: día, semana (lunes) o año. El slider recorre la
+           serie completa, así que también sirve para saltar entre años. */
+        /* Semana ISO: el año es el del jueves de esa semana, no el del lunes
+           (la semana del 1 ene 2004 empieza el 29 dic 2003 y es la 1 de 2004). */
+        function isoWeekOf(dt){
+            var d = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()));
+            var dow = (d.getUTCDay() + 6) % 7;
+            d.setUTCDate(d.getUTCDate() - dow + 3);
+            var year = d.getUTCFullYear();
+            var firstThu = new Date(Date.UTC(year, 0, 4));
+            var fDow = (firstThu.getUTCDay() + 6) % 7;
+            firstThu.setUTCDate(firstThu.getUTCDate() - fDow + 3);
+            return {year: year, week: 1 + Math.round((d - firstThu) / 604800000)};
+        }
+
+        function buildPeriods(){
+            periods = [];
+            if(gran === 'day'){
+                dates.forEach(function(d){ periods.push({id: d, label: fmtDate(d), dates: [d]}); });
+            } else if(gran === 'week'){
+                var byWeek = {};
+                dates.forEach(function(d){
+                    var p = d.split('-'), dt = new Date(+p[0], +p[1] - 1, +p[2]);
+                    var mon = new Date(dt);
+                    mon.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+                    var key = mon.getFullYear() + '-' + pad(mon.getMonth() + 1) + '-' + pad(mon.getDate());
+                    (byWeek[key] = byWeek[key] || []).push(d);
+                });
+                Object.keys(byWeek).sort().forEach(function(k){
+                    var dt = new Date(+k.split('-')[0], +k.split('-')[1] - 1, +k.split('-')[2]);
+                    var w = isoWeekOf(dt);
+                    periods.push({id: w.year + '-S' + pad(w.week),
+                                  label: 'sem ' + pad(w.week) + ' · ' + w.year,
+                                  dates: byWeek[k]});
+                });
+            } else {
+                var byYear = {};
+                dates.forEach(function(d){ var y = d.slice(0, 4); (byYear[y] = byYear[y] || []).push(d); });
+                Object.keys(byYear).sort().forEach(function(y){
+                    periods.push({id: y, label: y, dates: byYear[y]});
+                });
+            }
+            pIndex = Math.min(pIndex, Math.max(periods.length - 1, 0));
+        }
+
+        /* Promedio del contaminante en un periodo para una estación (media de
+           los promedios diarios disponibles). */
+        function valueFor(period, code, pol){
+            var sum = 0, n = 0;
+            for(var i = 0; i < period.dates.length; i++){
+                var day = allData[period.dates[i]];
+                if(!day) continue;
+                var series = day[pol];
+                if(!series) continue;
+                var v = series[code];
+                if(v != null){ sum += v; n++; }
+            }
+            return n ? sum / n : null;
+        }
+
+        /* Promedio del contaminante activo en cada zona cardinal, que es lo que
+           el mapa manda por OSC (una bocina por zona). */
+        function zoneAvgs(period){
+            var acc = {}, out = {};
+            ZONES.forEach(function(z){ acc[z] = {sum: 0, n: 0}; });
+            Object.keys(stations).forEach(function(code){
+                var z = stations[code].zone;
+                if(!acc[z]) return;
+                var v = valueFor(period, code, pollutant);
+                if(v > 0){ acc[z].sum += v; acc[z].n++; }
+            });
+            ZONES.forEach(function(z){ out[z] = acc[z].n ? acc[z].sum / acc[z].n : 0; });
+            return out;
+        }
+
+        function buildStations(){
+            Object.keys(stations).forEach(function(code){
+                var s = stations[code];
+                var el = document.createElement('div');
+                el.className = 'station-icon';
+                el.title = s.name;
+                el.innerHTML = '<div class="station-halo" id="l_' + code + '"></div><div class="station-core" id="c_' + code + '"></div>';
+                el.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    openStation(code);
+                });
+                markers[code] = new maplibregl.Marker({element: el, anchor: 'center'})
+                    .setLngLat([s.lon, s.lat])
+                    .addTo(map);
+            });
+        }
+
+        function fitStations(){
+            var b = new maplibregl.LngLatBounds();
+            Object.keys(stations).forEach(function(c){
+                b.extend([stations[c].lon, stations[c].lat]);
+            });
+            var narrow = window.innerWidth < 640;
+            map.fitBounds(b, {duration: 0, padding: {
+                top: narrow ? 80 : 70,
+                right: narrow ? 24 : 70,
+                bottom: narrow ? 160 : 175,
+                left: narrow ? 24 : 70
+            }});
+        }
+
+        function openStation(code){
+            openCode = code;
+            popup.setLngLat([stations[code].lon, stations[code].lat])
+                .setHTML(popupHTML(code))
+                .addTo(map);
+        }
+
+        function popupHTML(code){
+            var s = stations[code];
+            return '<div class="station-popup"><h3>' + s.name + '<span>' + code + '</span></h3>' + rowsHTML(code) + '</div>';
+        }
+
+        function rowsHTML(code){
+            var p = periods[pIndex];
+            var html = '';
+            if(!p) return html;
+            POLLUTANTS.forEach(function(key){
+                var info = pollutantInfo[key];
+                var v = valueFor(p, code, key);
+                html += '<div class="v"><span class="k">' + info.name + '</span><span class="n ' +
+                    (v == null ? '' : level(v, key)) + '">' +
+                    (v == null ? '—' : v.toFixed(1) + ' ' + info.unit) + '</span></div>';
+            });
+            return html;
+        }
+
+        function buildControls(){
+            var sd = $('sD'), sh = $('sH');
+            sd.max = Math.max(periods.length - 1, 0);
+            sd.addEventListener('input', function(){ pIndex = +this.value; paint(); sendOSC(); });
+            /* La hora sólo tiñe el mapa (paleta). Los datos son promedios
+               diarios, así que no cambia los valores ni lo que suena. */
+            sh.addEventListener('input', function(){ hour = +this.value; paint(); });
+
+            each($('gSel').children, function(b){
+                b.addEventListener('click', function(){
+                    gran = b.dataset.g;
+                    pIndex = 0;
+                    each($('gSel').children, function(x){ x.classList.toggle('on', x === b); });
+                    buildPeriods();
+                    $('sD').max = Math.max(periods.length - 1, 0);
+                    $('sD').value = pIndex;
+                    setSliderLabels();
+                    paint();
+                    sendOSC();
+                });
+            });
+
+            var sel = $('pSel');
+            POLLUTANTS.forEach(function(p){
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = p;
+                if(p === pollutant) b.className = 'on';
+                b.addEventListener('click', function(){
+                    pollutant = p;
+                    each(sel.children, function(x){ x.classList.toggle('on', x === b); });
+                    paint();
+                    sendOSC();
+                });
+                sel.appendChild(b);
+            });
+
+            $('playBtn').addEventListener('click', togglePlay);
+            each(document.querySelectorAll('#sSel button'), function(b){
+                b.addEventListener('click', function(){ setSpeed(+b.dataset.s); });
+            });
+            setSliderLabels();
+            paintRanges();
+        }
+
+        function setSliderLabels(){
+            var a = $('sMinLbl'), b = $('sMaxLbl');
+            if(!a || !b || !dates.length) return;
+            a.textContent = dates[0].slice(0, 4);
+            b.textContent = dates[dates.length - 1].slice(0, 4);
+        }
+
+        function paintRanges(){
+            var sd = $('sD'), sh = $('sH');
+            sd.style.setProperty('--p', (periods.length > 1 ? pIndex / (periods.length - 1) : 0) * 100 + '%');
+            sh.style.setProperty('--p', (hour / 23) * 100 + '%');
+        }
+
+        function paint(){
+            if(!dates.length || !periods.length) return;
+            applyPalette();
+            var p = periods[pIndex];
+            $('dD').textContent = p.label;
+            $('dH').textContent = pad(hour) + ':00';
+            paintRanges();
+
+            Object.keys(markers).forEach(function(code){
+                paintStation(code, valueFor(p, code, pollutant));
+            });
+            if(openCode) popup.setHTML(popupHTML(openCode));
+        }
+
+        function paintStation(code, v){
+            var core = $('c_' + code), halo = $('l_' + code);
+            if(!core || !halo) return;
+            if(v == null){
+                halo.style.opacity = '0';
+                core.classList.add('dim');
+                return;
+            }
+            core.classList.remove('dim');
+            var col = SCALE[level(v, pollutant)];
+            var c = rgb(col);
+            var norm = Math.min(v / (LIMITS[pollutant][1] * 1.35), 1.5);
+            var size = Math.round(26 + norm * 58);
+            halo.style.width = size + 'px';
+            halo.style.height = size + 'px';
+            halo.style.opacity = String(0.5 + lightness * 0.12 + Math.min(norm, 1) * 0.3);
+            halo.style.background = 'radial-gradient(circle, rgba(' + c.join(',') + ',0.62) 0%, rgba(' + c.join(',') + ',0.32) 30%, rgba(' + c.join(',') + ',0.1) 60%, rgba(' + c.join(',') + ',0) 100%)';
+            core.style.background = col;
+        }
+
+        function tick(){
+            if(!periods.length) return;
+            pIndex = (pIndex + 1) % periods.length;
+            $('sD').value = pIndex;
+            paint();
+            sendOSC();
+        }
+
+        function startTimer(){
+            clearInterval(timer);
+            document.documentElement.style.setProperty('--halo-t', Math.min(500, (INTERVAL / speed) * 0.85) + 'ms');
+            timer = setInterval(tick, INTERVAL / speed);
+        }
+
+        function togglePlay(){
+            playing = !playing;
+            var b = $('playBtn');
+            b.classList.toggle('on', playing);
+            b.setAttribute('aria-pressed', String(playing));
+            b.setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
+            if(playing) startTimer(); else { clearInterval(timer); timer = null; }
+        }
+
+        function setSpeed(s){
+            speed = s;
+            each(document.querySelectorAll('#sSel button'), function(b){
+                b.classList.toggle('on', +b.dataset.s === s);
+            });
+            if(playing) startTimer();
+        }
+
+        /* El puente (map/osc_bridge.js) es quien traduce WebSocket → OSC. Se
+           reintenta solo, así arrancarlo después de abrir la página no obliga a
+           recargarla, y el estado se reenvía cada pocos segundos: el receptor
+           cierra sus sintetizadores si deja de recibir. */
+        function connectOSC(){
+            try {
+                socket = new WebSocket('ws://localhost:8080');
+                socket.onopen = function(){
+                    socketUp = true;
+                    $('oD').className = 'ok';
+                    $('oStat').title = 'Puente OSC conectado';
+                    sendOSC();
+                };
+                socket.onclose = function(){
+                    socketUp = false;
+                    $('oD').className = '';
+                    $('oStat').title = 'Puente OSC desconectado';
+                    setTimeout(connectOSC, 3000);
+                };
+                socket.onerror = function(){ socketUp = false; };
+            } catch(e){ setTimeout(connectOSC, 3000); }
+            if(!heartbeat){
+                heartbeat = setInterval(sendOSC, 3000);
+            }
+        }
+
+        /* /aire <periodo> <contaminante> <Norte> <Sur> <Este> <Oeste>
+           Una bocina por zona: el receptor no reparte estaciones, sólo hace
+           sonar cuatro promedios. El periodo es una fecha (2004-05-01), una
+           semana (2004-S18) o un año (2024). */
+        function sendOSC(){
+            if(!socketUp || !periods.length) return;
+            var p = periods[pIndex];
+            if(!p) return;
+            var avgs = zoneAvgs(p);
+            var msg = {address: '/aire', args: [
+                {type: 's', value: p.id},
+                {type: 's', value: pollutant}
+            ]};
+            ZONES.forEach(function(z){ msg.args.push({type: 'f', value: Math.round(avgs[z] * 100) / 100}); });
+            try { socket.send(JSON.stringify(msg)); } catch(e){}
+        }
+
+        function hideLoader(){
+            var el = $('ld');
+            if(!el) return;
+            el.classList.add('off');
+            setTimeout(function(){ el.remove(); }, 550);
         }
     })();
     </script>
