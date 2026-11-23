@@ -1,87 +1,131 @@
 #!/usr/bin/env python3
 """
-Convert RAMA air quality Excel files to JSON for web visualization.
-Reads all pollutant files from 04RAMA/ and outputs a single JSON file.
+Convert RAMA air quality Excel files to per-year JSON for web visualization.
+
+Reads every YYYY<Pollutant>.xls in 04RAMA/ and writes one JSON per year to
+data/air_quality_YYYY.json, plus data/years.json listing the available years.
+
+Station names and coordinates come from the official SEDEMA catalog vendored in
+scripts/cat_estacion.csv (downloaded from
+https://aire.cdmx.gob.mx/descargas/Opendata/catalogos/cat_estacion.csv).
+Each year only includes the stations that actually report that year, because the
+RAMA station roster changes over time.
 """
 
-import os
+import csv
 import json
-import pandas as pd
+import re
 from pathlib import Path
 
-# Approximate coordinates for RAMA monitoring stations in CDMX
-# Format: station_code: {name, lat, lon}
-STATION_COORDS = {
-    "LAG": {"name": "Tlalnepantla", "lat": 19.5447, "lon": -99.2403},
-    "TAC": {"name": "Tacuba", "lat": 19.4583, "lon": -99.1983},
-    "FAC": {"name": "Ferrería", "lat": 19.4892, "lon": -99.1761},
-    "TLA": {"name": "Tláhuac", "lat": 19.2700, "lon": -99.0050},
-    "XAL": {"name": "Xalostoc", "lat": 19.5000, "lon": -99.1200},
-    "MER": {"name": "Merced", "lat": 19.4269, "lon": -99.1186},
-    "PED": {"name": "Pedregal", "lat": 19.3250, "lon": -99.1750},
-    "CES": {"name": "Cerro de la Estrella", "lat": 19.3600, "lon": -99.0600},
-    "PLA": {"name": "Plateros", "lat": 19.3833, "lon": -99.1500},
-    "HAN": {"name": "Hangares", "lat": 19.4333, "lon": -99.0833},
-    "UIZ": {"name": "UAM Iztapalapa", "lat": 19.3600, "lon": -99.1100},
-    "ARA": {"name": "Aragón", "lat": 19.4667, "lon": -99.1167},
-    "IMP": {"name": "Impresora", "lat": 19.4500, "lon": -99.1333},
-    "BJU": {"name": "Benito Juárez", "lat": 19.3833, "lon": -99.1500},
-    "TAX": {"name": "Taxqueña", "lat": 19.4000, "lon": -99.1333},
-    "MIN": {"name": "Minería", "lat": 19.3333, "lon": -99.1833},
-    "TLI": {"name": "Tlalnepantla (ALT)", "lat": 19.5333, "lon": -99.2333},
-    "ATI": {"name": "Atizapán", "lat": 19.5667, "lon": -99.2333},
-    "VIF": {"name": "Villa Francisca", "lat": 19.4167, "lon": -99.1333},
-    "SAG": {"name": "San Agustín", "lat": 19.4000, "lon": -99.1667},
-    "VAL": {"name": "Vallejo", "lat": 19.4833, "lon": -99.1500},
-    "AZC": {"name": "Azcapotzalco", "lat": 19.4833, "lon": -99.1833},
-    "SUR": {"name": "Sur", "lat": 19.3000, "lon": -99.1500},
-}
+import pandas as pd
 
-# Pollutant display names and units
+CATALOG_FILE = Path(__file__).parent / "cat_estacion.csv"
+FILE_RE = re.compile(r"^(\d{4})([A-Za-z0-9]+)\.xls$")
+
+# Pollutants the program sonifies. RAMA also publishes PM10 and PMCO (PM10-2.5);
+# PM2.5 is the fraction used to track long-term deterioration, so the coarser
+# particles are left out of the pipeline.
 POLLUTANT_INFO = {
     "CO": {"name": "Monóxido de Carbono", "unit": "ppm"},
     "NO": {"name": "Óxido Nítrico", "unit": "ppb"},
     "NO2": {"name": "Dióxido de Nitrógeno", "unit": "ppb"},
     "NOX": {"name": "Óxidos de Nitrógeno", "unit": "ppb"},
     "O3": {"name": "Ozono", "unit": "ppb"},
-    "PM10": {"name": "Material Particulado 10μm", "unit": "μg/m³"},
     "PM25": {"name": "Material Particulado 2.5μm", "unit": "μg/m³"},
     "SO2": {"name": "Dióxido de Azufre", "unit": "ppb"},
 }
+
+# Centro geográfico de la zona metropolitana. Cada estación se asigna a uno de
+# los cuatro puntos cardinales según el eje que domina respecto a este punto,
+# de modo que cada estación cae en exactamente una zona y una zona ocupa una
+# bocina del arreglo cuadrafónico.
+ZONE_CENTER = {"lat": 19.4326, "lon": -99.1332}
+ZONE_NAMES = ("Norte", "Sur", "Este", "Oeste")
+
+
+def zone_for(lat: float, lon: float) -> str:
+    """Cuadrante cardinal de una estación respecto a ZONE_CENTER."""
+    dlat = lat - ZONE_CENTER["lat"]
+    dlon = lon - ZONE_CENTER["lon"]
+    if abs(dlat) >= abs(dlon):
+        return "Norte" if dlat >= 0 else "Sur"
+    return "Este" if dlon >= 0 else "Oeste"
+
+
+def load_catalog() -> dict:
+    """Read the official station catalog (one row per station code)."""
+    with open(CATALOG_FILE, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    catalog = {}
+    for row in rows:
+        code = (row["cve_estac"] or "").strip()
+        if not code:
+            continue
+        alt = (row["alt"] or "").strip()
+        lat = round(float(row["latitud"]), 6)
+        lon = round(float(row["longitud"]), 6)
+        catalog[code] = {
+            "name": row["nom_estac"].strip(),
+            "lat": lat,
+            "lon": lon,
+            "altitude": int(alt) if alt.isdigit() else None,
+            "zone": zone_for(lat, lon),
+            "note": (row["obs_estac"] or "").strip(),
+        }
+    return catalog
 
 
 def read_pollutant_file(filepath: Path) -> pd.DataFrame:
     """Read a RAMA Excel file and return a cleaned DataFrame."""
     df = pd.read_excel(filepath, engine="xlrd")
 
+    df.columns = [str(c).strip().upper() for c in df.columns]
+
     # Replace -99 with None (missing data)
     numeric_cols = df.columns[2:]  # Skip FECHA, HORA
     df[numeric_cols] = df[numeric_cols].replace(-99, None)
 
     # Convert date to proper format
-    df["FECHA"] = pd.to_datetime(df["FECHA"], format="%d/%m/%Y")
+    df["FECHA"] = pd.to_datetime(df["FECHA"], format="%d/%m/%Y", errors="coerce")
+    df = df[df["FECHA"].notna()]
 
     return df
 
 
-def extract_hours_data(df: pd.DataFrame) -> dict:
-    """Convert DataFrame to nested dict: date -> station -> [24 values]."""
-    data = {}
-    stations = [col for col in df.columns if col not in ["FECHA", "HORA"]]
+def extract_daily_data(df: pd.DataFrame) -> tuple[dict, set]:
+    """Promedio diario por estación: date -> station -> promedio (o None).
+
+    La app ya no recorre las horas: la línea de tiempo avanza por día, semana o
+    año, así que basta con el promedio del día. Los datos por hora siguen
+    disponibles en 04RAMA/ y se pueden regenerar.
+    """
+    stations = [col for col in df.columns if col not in ("FECHA", "HORA")]
+    acc: dict[str, dict[str, list]] = {}
+    used = set()
 
     for _, row in df.iterrows():
         date_key = row["FECHA"].strftime("%Y-%m-%d")
         hour = int(row["HORA"]) - 1  # Convert to 0-indexed
+        if not 0 <= hour < 24:
+            continue
 
-        if date_key not in data:
-            data[date_key] = {s: [None] * 24 for s in stations}
-
+        day = acc.setdefault(date_key, {s: [0.0, 0] for s in stations})
         for station in stations:
             value = row[station]
             if pd.notna(value):
-                data[date_key][station][hour] = float(value)
+                day[station][0] += float(value)
+                day[station][1] += 1
+                used.add(station)
 
-    return data
+    data = {
+        date: {
+            station: (round(total / count, 2) if count else None)
+            for station, (total, count) in day.items()
+        }
+        for date, day in acc.items()
+    }
+    return data, used
 
 
 def main():
@@ -90,57 +134,80 @@ def main():
     output_dir = script_dir.parent / "data"
     output_dir.mkdir(exist_ok=True)
 
-    # Find all Excel files
-    excel_files = sorted(data_dir.glob("2004*.xls"))
+    catalog = load_catalog()
 
-    if not excel_files:
-        print(f"No Excel files found in {data_dir}")
+    # Group input files by year: {2004: {"O3": path, ...}, ...}
+    by_year: dict[int, dict[str, Path]] = {}
+    for filepath in sorted(data_dir.glob("*.xls")):
+        match = FILE_RE.match(filepath.name)
+        if not match:
+            continue
+        year, pollutant = int(match.group(1)), match.group(2).upper()
+        if pollutant not in POLLUTANT_INFO:
+            continue
+        by_year.setdefault(year, {})[pollutant] = filepath
+
+    if not by_year:
+        print(f"No RAMA Excel files found in {data_dir}")
         return
 
-    print(f"Found {len(excel_files)} pollutant files")
+    unknown = set()
+    written = []
+    all_dates = []  # todas las fechas, para la línea de tiempo de 2004 a 2024
 
-    # Process each pollutant
-    all_data = {}
-    for filepath in excel_files:
-        pollutant = filepath.stem.replace("2004", "")
-        print(f"Processing {pollutant}...")
-        df = read_pollutant_file(filepath)
-        all_data[pollutant] = extract_hours_data(df)
+    for year in sorted(by_year):
+        year_data: dict[str, dict] = {}
+        stations_used: set[str] = set()
 
-    # Build output structure
-    output = {
-        "metadata": {
-            "year": 2004,
-            "description": "Calidad del aire CDMX - RAMA 2004",
-            "stations_count": len(STATION_COORDS),
-            "pollutants": list(POLLUTANT_INFO.keys()),
-            "missing_value": None,
-            "hours_per_day": 24,
-        },
-        "stations": STATION_COORDS,
-        "pollutant_info": POLLUTANT_INFO,
-        "data": {},
-    }
+        for pollutant, filepath in sorted(by_year[year].items()):
+            print(f"{year} {pollutant}...")
+            df = read_pollutant_file(filepath)
+            pollutant_data, used = extract_daily_data(df)
+            stations_used |= used
+            for date_key, stations_dict in pollutant_data.items():
+                year_data.setdefault(date_key, {})[pollutant] = stations_dict
 
-    # Merge all pollutant data by date
-    dates = set()
-    for pollutant_data in all_data.values():
-        dates.update(pollutant_data.keys())
+        unknown |= stations_used - set(catalog)
+        stations_used &= set(catalog)
 
-    for date in sorted(dates):
-        output["data"][date] = {}
-        for pollutant in all_data:
-            if date in all_data[pollutant]:
-                output["data"][date][pollutant] = all_data[pollutant][date]
+        output = {
+            "metadata": {
+                "year": year,
+                "description": f"Calidad del aire CDMX - RAMA {year}",
+                "stations_count": len(stations_used),
+                "pollutants": sorted(by_year[year]),
+                "missing_value": None,
+                "hours_per_day": 24,
+                "aggregation": "promedio diario",
+            },
+            "stations": {code: catalog[code] for code in sorted(stations_used)},
+            "pollutant_info": POLLUTANT_INFO,
+            "data": year_data,
+        }
 
-    # Write JSON
-    output_file = output_dir / "air_quality_2004.json"
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=None)
+        output_file = output_dir / f"air_quality_{year}.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(output, f, ensure_ascii=False, separators=(",", ":"))
 
-    print(f"\nDone! Output: {output_file}")
-    print(f"Total dates: {len(dates)}")
-    print(f"File size: {output_file.stat().st_size / 1024:.0f} KB")
+        written.append((year, len(stations_used), len(year_data), output_file.stat().st_size))
+        all_dates.extend(year_data)
+        zones = {}
+        for code in stations_used:
+            zones.setdefault(catalog[code]["zone"], []).append(code)
+        print(f"  -> {output_file.name}: {len(year_data)} días, {len(stations_used)} estaciones, "
+              f"zonas {', '.join(f'{z}:{len(zones.get(z, []))}' for z in ZONE_NAMES)}")
+
+    # Índice de años, leído por el mapa para armar el selector
+    with open(output_dir / "years.json", "w", encoding="utf-8") as f:
+        json.dump({"years": sorted(by_year)}, f)
+
+    print("\nYears written:")
+    for year, stations, days, size in written:
+        print(f"  {year}: {stations:2d} estaciones, {days:3d} días, {size / 1024:6.0f} KB")
+    print(f"\nTotal: {len(written)} años -> {output_dir}")
+
+    if unknown:
+        print(f"\nAdvertencia: estaciones sin coordenadas en el catálogo (se omiten): {' '.join(sorted(unknown))}")
 
 
 if __name__ == "__main__":

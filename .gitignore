@@ -23,6 +23,9 @@ yarn-error.log*
 *.aif
 *.aiff
 
+# Datos crudos de RAMA: se regeneran con scripts/download_rama.py
+04RAMA/*.xls
+
 # Operating System
 .DS_Store
 Thumbs.db
