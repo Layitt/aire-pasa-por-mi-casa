@@ -10,16 +10,18 @@ Aire pasa por mi casa/
 ├── data/
 │   ├── years.json             # Años disponibles (selector del mapa)
 │   └── air_quality_YYYY.json  # Promedios diarios por estación, un archivo por año
+├── servidor.js                # Servidor estático del mapa (sólo Node, sin dependencias)
 ├── scripts/
 │   ├── download_rama.py       # Descarga zips de RAMA + catálogo de estaciones
 │   ├── cat_estacion.csv       # Catálogo oficial de estaciones (SEDEMA)
-│   └── convert_data.py        # Conversor Excel → JSON por año
+│   ├── convert_data.py        # Conversor Excel → JSON por año
+│   └── empaquetar_windows.sh  # Copia lista para correr en Windows
 ├── map/
 │   ├── index.html             # Mapa interactivo (MapLibre GL, paleta por hora)
 │   ├── osc_bridge.js          # Puente WebSocket → OSC
 │   └── package.json           # Dependencias Node.js
 └── supercollider/
-    ├── synthdefs.scd          # Definiciones de síntesis
+    ├── synthdefs.scd          # Definiciones de síntesis (un instrumento por contaminante + salida)
     └── osc_receiver.scd       # Receptor OSC
 ```
 
@@ -58,7 +60,7 @@ va en la raíz del proyecto, no dentro de `map/`:
 
 ```bash
 # Terminal 1: Servidor HTTP (desde la raíz del proyecto)
-python3 -m http.server 3000
+python3 -m http.server 3000     # o: node servidor.js
 
 # Terminal 2: Puente OSC (la primera vez instala dependencias)
 cd map && npm install && node osc_bridge.js
@@ -76,7 +78,19 @@ SuperCollider.
 ### 3. Iniciar SuperCollider
 
 1. Abrir SuperCollider
-2. Ejecutar `osc_receiver.scd`
+2. Arrancar el servidor de audio con cuatro salidas (una por bocina):
+
+   ```supercollider
+   s.options.numOutputBusChannels = 4;
+   s.reboot;
+   ```
+
+3. Ejecutar `osc_receiver.scd`
+
+El receptor pregunta al servidor cuántas salidas tiene y lo dice en la ventana de
+post: `salida cuadrafónica: Norte=1, Este=2, Sur=3, Oeste=4`. Si contesta que el
+servidor tiene dos canales, el arreglo todavía no es cuadrafónico: las cuatro
+zonas se oyen colapsadas a un par estéreo (ver [Zonas y salida](#zonas-y-salida)).
 
 No hace falta ejecutar `synthdefs.scd` aparte: el receptor lo reenvía al
 servidor cada vez que arranca (es idempotente). Eso evita el silencio más
@@ -89,7 +103,8 @@ servidor (Ctrl+B / `Server.default.boot`) y vuelve a ejecutarlo.
 
 Si reinicias el servidor de audio, ejecuta `~aire.resetState`: el receptor
 guarda sus sintetizadores en memoria y, tras un reinicio, esos nodos ya no
-existen (los mensajes sólo actualizarían fantasmas y no sonaría nada).
+existen (los mensajes sólo actualizarían fantasmas y no sonaría nada). Eso
+incluye el nodo que reparte las cuatro bocinas, que el reinicio se lleva.
 
 El receptor además:
 
@@ -102,7 +117,8 @@ El receptor además:
 ### 4. Conectar
 
 - El mapa envía el promedio del contaminante activo en cada zona cardinal
-- Cada zona tiene su frecuencia base y hoy su propio paneo estéreo
+- Cada zona tiene su frecuencia base y suena en su propia bocina
+- Volumen general: `~aire.volumen(0.6)`
 - Para parar todo: `~aire.stopAll` en SuperCollider
 
 Si el mapa manda `0 0 0 0` no es un fallo del audio: significa que el periodo
@@ -123,6 +139,21 @@ Comprobar en SuperCollider que el receptor está vivo: la ventana de post debe
 mostrar una línea `AIRE: <periodo> [<contaminante>] | N: … | S: … | E: … | O: …`
 cada vez que el mapa cambia. Si no aparece ninguna, el receptor no está
 ejecutado o su sclang escucha en otro puerto.
+
+### Copia para Windows
+
+`scripts/empaquetar_windows.sh` arma una carpeta autosuficiente (por defecto en
+`/mnt/compartido/AireCDMX`, que Windows ve como una unidad) con los datos, el
+mapa, el puente ya con sus dependencias y los SynthDefs:
+
+```bash
+scripts/empaquetar_windows.sh [/ruta/destino]
+```
+
+En Windows basta con doble clic en `INICIAR-MAPA.bat` (mapa) e
+`INICIAR-PUENTE.bat` (audio). Es la misma aplicación, no una versión aparte: lo
+único que cambia es que Node sirve el mapa con `servidor.js` en vez de Python.
+El audio necesita SuperCollider instalado en Windows.
 
 ## Controles del Mapa
 
@@ -160,8 +191,14 @@ PM10 y PMCO quedan fuera del pipeline.
 | NO2 | Raspado metálico | 0-120 ppb |
 | NOX | Clusters armónicos | 0-250 ppb |
 | O3 | Pads brillantes | 0-200 ppb |
-| PM25 | Partículas finas | 0-150 μg/m³ |
-| SO2 | Drone de ronroneo | 0-50 ppb |
+| PM25 | Granos finos y chispas | 0-150 μg/m³ |
+| SO2 | Drone de retumbo | 0-50 ppb |
+
+El volumen de cada instrumento sale del promedio de la zona dividido entre su
+rango típico: 0 es silencio y el máximo típico es amplitud 1. Como los siete
+están calibrados a esa misma escala (`nivel` al final de cada `SynthDef`),
+ingún contaminante queda inaudible frente a otro. El volumen de todo el arreglo
+se sube o baja aparte con `~aire.volumen(0.6)`.
 
 ## Zonas y salida
 
@@ -174,10 +211,28 @@ estación del JSON, y el mapa promedia el contaminante activo por zona. Con el
 catálogo completo quedan 17 estaciones al Norte, 24 al Sur, 13 al Este y 15 al
 Oeste.
 
-El plan es un arreglo cuadrafónico con una bocina por zona. Hoy
-`osc_receiver.scd` sigue mezclando las cuatro zonas a estéreo con `\pan`; cuando
-haya tarjeta de 4 canales basta con pasar `\out` distinto por zona al crear cada
-`Synth`.
+El arreglo es cuadrafónico: cada zona es una bocina y suena en su propio canal,
+en sentido horario visto desde el centro del arreglo.
+
+| Canal | Zona |
+|-------|------|
+| 1 | Norte |
+| 2 | Este |
+| 3 | Sur |
+| 4 | Oeste |
+
+Los instrumentos son mono y no saben dónde están parados: escriben en un bus por
+zona y un solo nodo (`\aire_salida_cuadrafonico`) reparte a las cuatro salidas.
+Cambiar de interfaz o reacomodar bocinas es cambiar el orden de esas cuatro
+salidas en ese `SynthDef`, no tocar los siete instrumentos.
+
+Hace falta arrancar el servidor con cuatro salidas
+(`s.options.numOutputBusChannels = 4; s.reboot;`) y una interfaz de cuatro
+canales. Si el servidor tiene dos canales, el receptor avisa en la ventana de
+post y carga `\aire_salida_estereo` en su lugar: las cuatro zonas se oyen
+colapsadas a un par estéreo (Oeste a la izquierda, Este a la derecha, Norte y Sur
+al centro desplazado). Sirve para ensayar con audífonos o para mezclar, pero no
+es cuadrafonía: para eso cada zona necesita su bocina.
 
 ## OSC Format
 
